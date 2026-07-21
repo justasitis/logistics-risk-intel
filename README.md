@@ -26,6 +26,13 @@ data/                      # 런타임 데이터 (git 무시, *.sample.json만 �
 docs/                      # 각 단계 패치 README (참고용)
 ```
 
+## VDI 이식 방법
+
+VDI는 git 접속이 불가하므로, GitHub에서 **Code → Download ZIP**으로 난 다운로드해
+VDI 내부로 옮긴다. 압축을 풀면 `logistics-risk-intel-main\` 폴터가 생성되므로
+내용물을 `C:\dev\logistics-risk-intel\`에 맞춰 둔다(폴터명 변경 또는 내용물만 복사).
+자격증명·실데이터(`data/*.json`, `.env`)는 repo에 없으므로 VDI 기존 환경의 것을 그대로 사용한다.
+
 ## 실행
 
 패키지 레지스트리: **npm·pip 모두 사내 Nexus(`http://10.242.199.4:8987`)를 사용**한다.
@@ -35,14 +42,20 @@ docs/                      # 각 단계 패치 README (참고용)
   (VDI `pip config list` 기준: `global.index-url=http://10.242.199.4:8987/repository/pypi-group-internal/simple`,
   `global.trusted-host=10.242.199.4` — 이미 설정되어 있다면 `--index-url` 없이 `pip install`만으로 동작).
 
-백엔드 (프로젝트 루트에서):
+백엔드 (프로젝트 루트에서, `.venv` 가상환경 사용):
 
 ```bash
+# 최초 1회: 가상환경 생성
+python -m venv .venv
+.venv\Scripts\activate
+
 # 주의 1) searoute는 경유항로(stopby) 기능 호환을 위해 1.4.3 고정
 # 주의 2) 한글 Windows에서는 UTF-8 모드로 설치 (소스 배포판 빌드 시 cp949 오류 방지)
-# 주의 3) 사내 Nexus PyPI 그룹 경유 (VDI pip config 기준)
+# 주의 3) 사내 Nexus PyPI 그룹 경유 (pip config 설정되어 있으면 --index-url 생략 가능)
 set PYTHONUTF8=1
 pip install --index-url http://10.242.199.4:8987/repository/pypi-group-internal/simple --trusted-host 10.242.199.4 fastapi uvicorn pandas numpy requests folium searoute==1.4.3 "pydantic>=2.6" pydantic-settings httpx
+
+# 실행 (.venv 활성화 상태)
 uvicorn api_server:app --host 127.0.0.1 --port 8000
 ```
 
