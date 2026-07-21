@@ -83,15 +83,15 @@ function popupHtml(properties: Record<string, unknown>) {
 
   return `
     <div class="route-popup">
-      <div class="route-popup__severity">${severity}</div>
+      <div class="route-popup__severity">${escapeHtml(severity)}</div>
       <strong>${escapeHtml(displayId)}</strong>
-      <div>${pol} → ${pod}</div>
+      <div>${escapeHtml(pol)} → ${escapeHtml(pod)}</div>
       <div>경유: ${escapeHtml(stopbyLabel)}</div>
       <div>Route: ${escapeHtml(routeStatus)}</div>
       <hr>
       <div>ETA 누적 지연: ${etaDelay > 0 ? '+' : ''}${etaDelay}일</div>
       <div>Lead Time 변화: ${ltVariance > 0 ? '+' : ''}${ltVariance}일</div>
-      <div class="route-popup__signals">${signals}</div>
+      <div class="route-popup__signals">${escapeHtml(signals)}</div>
     </div>
   `
 }
