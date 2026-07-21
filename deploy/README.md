@@ -7,7 +7,8 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 
 | 파일 | 실행 위치 | 역할 |
 |---|---|---|
-| `01_Git-Pull.cmd` | 로컬 PC | GitHub 최신 코드 pull (로컬 변경 있으면 중단) |
+| `01_Git-Pull.cmd` | 로컬 PC | GitHub 최신 코드 가져오기 — 최초엔 자동 연결(clone 대체), 이후 pull. `C:\Work\logistics-risk-intel` 에 두고 실행 |
+| `02_VDI-Deploy.cmd` | VDI | 원클릭 배포 — Deploy-From-Local.ps1을 호출 (더블클릭 실행) |
 | `Deploy-From-Local.ps1` | VDI | 변경·신규 복사 → npm ci(조걶) → build → pip(조걶) → 재기동 |
 | `Start-Backend.ps1` | VDI | `.venv`로 백엔드 백그라운드 기동 (`backend.pid`, `logs\` 기록) |
 | `Stop-Backend.ps1` | VDI | `backend.pid`로 백엔드 종료 |
@@ -18,14 +19,17 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 2. VDI: `C:\dev\logistics-risk-intel` 에 프로젝트 배치 (zip 또는 본 스크립트 최초 실행)
 3. VDI: `python -m venv .venv` + 패키지 설치 (루트 README "실행" 참고)
 4. VDI: `frontend\npm ci` + `.env` 작성 (`.env.example` 복사)
-5. VDI 파일 탐색기에서 `\\tsclient\C\Work\logistics-risk-intel` 이 보이는지 확인
-   (RDP 드라이브 리다이렉션. 안 보이면 zip 반입 후 로컬 경로를 -Source로 지정)
+5. VDI 파일 탐색기에서 `\\Client\C$\Work\logistics-risk-intel` 이 보이는지 확인
+   (RDP 클라이언트 드라이브 공유. 안 보이면 zip 반입 후 로컬 경로를 -Source로 지정)
 
 ## 일상 배포 절차
 
 ```
-[로컬 PC]  01_Git-Pull.cmd
-[VDI]      Deploy-From-Local.ps1 -Preview     ← 변경 예정 파일 확인
+[로컬 PC]  01_Git-Pull.cmd                    ← GitHub 최신 코드 (원클릭)
+[VDI]      02_VDI-Deploy.cmd                  ← 원클릭 배포 (복사~재기동 전체)
+
+세부 확인이 필요하면 ps1을 직접:
+[VDI]      Deploy-From-Local.ps1 -Preview     ← 변경 예정 파일만 확인
 [VDI]      Deploy-From-Local.ps1              ← 실제 반영
 ```
 
@@ -70,7 +74,7 @@ robocopy(`/E`)는 삭제를 전파하지 않는다 — repo에서 지운 파일�
 
 | 증상 | 확인 |
 |---|---|
-| `Source를 찾을 수 없음` | RDP 리다이렉션: VDI에서 `\\tsclient\C` 접근 확인. 안 되면 zip 풀고 `-Source`로 로컬 경로 지정 |
+| `Source를 찾을 수 없음` | RDP 클라이언트 드라이브 공유: VDI에서 `\\Client\C$` 접근 확인. 안 되면 zip 풀고 `-Source`로 로컬 경로 지정 |
 | `npm ci 실패` | 사내 Nexus npm 레지스트리 연결, `.npmrc` 확인 |
 | `pip install 실패` | Nexus PyPI(`pypi-group-internal`) 확인, `PYTHONUTF8=1` 여부(스크립트가 자동 설정) |
 | 백엔드 헬스체크 실패 | `logs\backend_*.log` 확인. 포트 8000 점유 여부 (`netstat -ano \| findstr :8000`) |

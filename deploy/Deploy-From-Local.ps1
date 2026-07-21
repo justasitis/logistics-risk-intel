@@ -18,8 +18,8 @@ param(
     [switch]$SkipPip,
     [switch]$SkipRestart,
 
-    # VDI에서 보이는 로컬 PC 프로젝트 (RDP 드라이브 리다이렉션)
-    [string]$Source = "\\tsclient\C\Work\logistics-risk-intel",
+    # VDI에서 보이는 로컬 PC 프로젝트 (RDP 클라이언트 드라이브 공유)
+    [string]$Source = "\\Client\C$\Work\logistics-risk-intel",
 
     # VDI 프로젝트
     [string]$Target = "C:\dev\logistics-risk-intel",
@@ -90,7 +90,7 @@ Write-Host "=========================================="
 if (-not (Test-Path $Source)) {
     throw @"
 VDI에서 로컬 프로젝트를 찾을 수 없습니다: $Source
-VDI 파일 탐색기에서 \\tsclient\C 가 보이는지(RDP 드라이브 리다이렉션) 확인하세요.
+VDI 파일 탐색기에서 \\tsclient\C 가 보이는지(RDP 클라이언트 드라이브 공유) 확인하세요.
 "@
 }
 if (-not (Test-Path $Target)) {
