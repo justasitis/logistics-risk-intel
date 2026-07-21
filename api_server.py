@@ -19,6 +19,18 @@ Vue 3 대시보드용 FastAPI 백엔드.
 
 from __future__ import annotations
 
+# 프로젝트 루트 .env를 환경변수로 로드한다 (서비스 모듈 import보다 먼저 실행되어야 함).
+# python-dotenv는 pydantic-settings의 의존성으로 함께 설치된다.
+from pathlib import Path as _Path
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+
+    _load_dotenv(_Path(__file__).resolve().parent / ".env")
+except ImportError:  # dotenv 미설치 환경에서는 OS 환경변수만 사용
+    pass
+
+
 
  
 

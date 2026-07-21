@@ -70,29 +70,19 @@ npm run build      # vue-tsc 타입체크 + vite build
 
 ## 환경 변수
 
-데이터레이크 (`services/datalake_schedule_client.py`):
+**루트의 `.env` 파일 하나에서 전부 관리한다.** `.env.example`을 복사해 값만 입력하면 된다.
 
-- `DATALAKE_BASE_URL`, `DATALAKE_USERNAME`, `DATALAKE_PASSWORD`, `DATALAKE_TIMEOUT`
+```powershell
+copy .env.example .env   # 이후 .env 안의 값을 편집
+```
 
-MI 정제 (Actify/Dify, `backend/app/core/mi_settings.py`, `backend/.env.example` 참고):
+`api_server.py` 기동 시 자동 로드되며(개별 PowerShell 환경변수 설정 불필요), `.env`는 git/zip에 포함되지 않는다. OS 환경변수가 있으면 그쪽이 우선한다. 항목별 설명은 `.env.example`의 주석 참고:
 
-- `ACTIFY_BASE_URL`, `ACTIFY_ENDPOINT_PATH`, `ACTIFY_API_KEY`, `ACTIFY_USER`
-- `ACTIFY_RESPONSE_MODE`, `ACTIFY_TIMEOUT_SECONDS`, `ACTIFY_VERIFY_SSL`
-- `MI_VDI_MAX_CANDIDATES`, `MI_RUN_STORE_DIR`
-
-Marinesia AIS SharePoint (`backend/app/core/marinesia_settings.py`):
-
-- `MARINESIA_SHAREPOINT_ROOT`, `MARINESIA_DEFAULT_COMPANY`
-- `MARINESIA_LIVE_HOURS`, `MARINESIA_STALE_WARNING_HOURS`, `MARINESIA_MAX_FILE_SIZE_MB`
-
-경유지(Stop-by) (`backend/app/core/stopby_settings.py`):
-
-- `EUROPE_BLANK_STOPBY_DEFAULT`, `SEAROUTE_ALGORITHM`
-- `STOPBY_MAXIMUM_ROUTES`, `STOPBY_ROUTE_CACHE_SIZE`
-
-수동 좌표 (`backend/app/services/manual_coordinate_store.py`):
-
-- `MANUAL_COORDINATE_FILE` (기본: `<프로젝트 루트>/data/manual_coordinates.json`)
+- 데이터레이크 (필수): `DATALAKE_USERNAME`, `DATALAKE_PASSWORD`, `DATALAKE_BASE_URL`, `DATALAKE_TIMEOUT`
+- MI 정제(Actify): `ACTIFY_BASE_URL`, `ACTIFY_ENDPOINT_PATH`, `ACTIFY_API_KEY`, `ACTIFY_USER`, `ACTIFY_RESPONSE_MODE`, `ACTIFY_TIMEOUT_SECONDS`, `ACTIFY_VERIFY_SSL`, `MI_VDI_MAX_CANDIDATES`, `MI_RUN_STORE_DIR`
+- Marinesia AIS: `MARINESIA_SHAREPOINT_ROOT`, `MARINESIA_DEFAULT_COMPANY`, `MARINESIA_LIVE_HOURS`, `MARINESIA_STALE_WARNING_HOURS`, `MARINESIA_MAX_FILE_SIZE_MB`
+- 경유지(Stop-by): `EUROPE_BLANK_STOPBY_DEFAULT`, `SEAROUTE_ALGORITHM`, `STOPBY_ROUTE_CACHE_SIZE`, `STOPBY_MAXIMUM_ROUTES`
+- 수동 좌표: `MANUAL_COORDINATE_FILE`
 
 프런트엔드 (`frontend/.env.example` 참고):
 
