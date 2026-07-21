@@ -1,0 +1,30 @@
+/* Step 9.15: widen the dashboard detail side and keep master/detail first. */
+.dashboard {
+  grid-template-columns:
+    minmax(390px, 1fr)
+    clamp(720px, 58vw, 1000px) !important;
+}
+
+.side-panel {
+  display: flex !important;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.side-panel > .error-banner {
+  order: -110;
+}
+
+.side-panel > .anomaly-master-detail {
+  order: -100;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1380px) {
+  .dashboard {
+    grid-template-columns:
+      minmax(360px, 1fr)
+      720px !important;
+  }
+}

@@ -1,0 +1,3 @@
+vessel_name,vessel_name_key,mmsi_no,shipment_count,companies,lanes,earliest_etd,latest_eta,notes
+M/V KIEL EXPRESS,M/V KIEL EXPRESS,,3,SKO|SKOH,CNSHA-HUIPA,2026-07-10,2026-07-25,
+KIEL EXPRESS,KIEL EXPRESS,,1,SKO,CNSHA-KRPUS,2026-07-11,2026-07-20,별도 IF 선박명으로 유지

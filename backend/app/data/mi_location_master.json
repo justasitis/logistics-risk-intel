@@ -1,0 +1,82 @@
+{
+  "RED_SEA": {
+    "name": "Red Sea",
+    "location_type": "SEA_AREA",
+    "lat": 20.5,
+    "lon": 38.5,
+    "default_radius_km": 500,
+    "aliases": ["홍해"]
+  },
+  "BAB_EL_MANDEB": {
+    "name": "Bab el-Mandeb Strait",
+    "location_type": "CHOKEPOINT",
+    "lat": 12.6,
+    "lon": 43.35,
+    "default_radius_km": 180,
+    "aliases": ["Bab al-Mandab", "바브엘만데브"]
+  },
+  "SUEZ_CANAL": {
+    "name": "Suez Canal",
+    "location_type": "CHOKEPOINT",
+    "lat": 30.45,
+    "lon": 32.35,
+    "default_radius_km": 130,
+    "aliases": ["수에즈 운하"]
+  },
+  "STRAIT_OF_HORMUZ": {
+    "name": "Strait of Hormuz",
+    "location_type": "CHOKEPOINT",
+    "lat": 26.55,
+    "lon": 56.25,
+    "default_radius_km": 180,
+    "aliases": ["Hormuz Strait", "호르무즈 해협"]
+  },
+  "STRAIT_OF_MALACCA": {
+    "name": "Strait of Malacca",
+    "location_type": "CHOKEPOINT",
+    "lat": 3.0,
+    "lon": 101.2,
+    "default_radius_km": 260,
+    "aliases": ["Malacca Strait", "말라카 해협"]
+  },
+  "PANAMA_CANAL": {
+    "name": "Panama Canal",
+    "location_type": "CHOKEPOINT",
+    "lat": 9.1,
+    "lon": -79.7,
+    "default_radius_km": 120,
+    "aliases": ["파나마 운하"]
+  },
+  "CAPE_OF_GOOD_HOPE": {
+    "name": "Cape of Good Hope",
+    "location_type": "CHOKEPOINT",
+    "lat": -34.36,
+    "lon": 18.47,
+    "default_radius_km": 300,
+    "aliases": ["희망봉"]
+  },
+  "ICN": {
+    "name": "Incheon International Airport",
+    "location_type": "AIRPORT",
+    "lat": 37.4602,
+    "lon": 126.4407,
+    "default_radius_km": 40,
+    "aliases": ["Incheon Airport", "인천공항"]
+  },
+  "NRT": {
+    "name": "Narita International Airport",
+    "location_type": "AIRPORT",
+    "lat": 35.772,
+    "lon": 140.3929,
+    "default_radius_km": 40,
+    "aliases": ["Narita Airport", "나리타공항"]
+  },
+  "TSN": {
+    "name": "Tianjin Binhai International Airport",
+    "location_type": "AIRPORT",
+    "lat": 39.1244,
+    "lon": 117.3462,
+    "default_radius_km": 40,
+    "aliases": ["Tianjin Airport", "톈진공항"]
+  }
+}

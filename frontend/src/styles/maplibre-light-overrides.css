@@ -1,0 +1,32 @@
+/* MapLibre light premium overrides */
+:root, :root[data-theme="logistics-light"], .logistics-light-theme {
+  --map-route-sea: #2563eb;
+  --map-route-air: #06b6d4;
+  --map-route-rail: #14b8a6;
+  --map-route-road: #64748b;
+  --map-zone-critical-fill: rgba(239,68,68,.18);
+  --map-zone-critical-line: rgba(239,68,68,.78);
+  --map-zone-high-fill: rgba(249,115,22,.16);
+  --map-zone-high-line: rgba(249,115,22,.72);
+  --map-zone-medium-fill: rgba(234,179,8,.14);
+  --map-zone-medium-line: rgba(234,179,8,.70);
+  --map-zone-low-fill: rgba(16,185,129,.12);
+  --map-zone-low-line: rgba(16,185,129,.68);
+  --map-ais-live: #10b981;
+  --map-ais-stale: #f59e0b;
+  --map-ais-nosignal: #94a3b8;
+}
+.maplibregl-ctrl-group,.mapboxgl-ctrl-group { overflow: hidden !important; border: 1px solid rgba(16,42,67,.12) !important; border-radius: 14px !important; background: rgba(255,255,255,.78) !important; box-shadow: 0 12px 28px rgba(15,32,54,.12) !important; backdrop-filter: blur(16px); }
+.maplibregl-ctrl-group button,.mapboxgl-ctrl-group button { background-color: transparent !important; }
+.maplibregl-ctrl-group button:hover,.mapboxgl-ctrl-group button:hover { background-color: rgba(37,99,235,.08) !important; }
+.maplibregl-popup-content,.mapboxgl-popup-content { min-width: 240px; color: #122033 !important; border: 1px solid rgba(16,42,67,.12); border-radius: 18px !important; background: rgba(255,255,255,.88) !important; box-shadow: 0 16px 40px rgba(15,32,54,.16) !important; backdrop-filter: blur(18px); }
+.maplibregl-ctrl-attrib,.mapboxgl-ctrl-attrib { color: rgba(52,72,97,.72) !important; background: rgba(255,255,255,.64) !important; border-radius: 10px 0 0 0 !important; backdrop-filter: blur(12px); }
+.map-popup-title { margin: 0 0 6px; color: #122033; font-weight: 840; font-size: .92rem; }
+.map-popup-subtitle { margin: 0 0 8px; color: #607086; font-size: .78rem; }
+.map-popup-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid rgba(16,42,67,.08); font-size: .78rem; }
+.map-popup-row span:first-child { color: #607086; }
+.map-popup-row span:last-child { color: #122033; font-weight: 760; }
+.ais-marker { width: 14px; height: 14px; border-radius: 999px; border: 2px solid white; background: var(--map-ais-live); box-shadow: 0 0 0 4px rgba(16,185,129,.14), 0 8px 18px rgba(15,32,54,.18); }
+.ais-marker--stale { background: var(--map-ais-stale); box-shadow: 0 0 0 4px rgba(245,158,11,.16), 0 8px 18px rgba(15,32,54,.18); }
+.ais-marker--nosignal { background: var(--map-ais-nosignal); box-shadow: 0 0 0 4px rgba(148,163,184,.16), 0 8px 18px rgba(15,32,54,.16); }
+.port-marker { display: grid; width: 22px; height: 22px; place-items: center; color: white; font-size: 11px; font-weight: 900; border: 2px solid white; border-radius: 999px; background: linear-gradient(135deg,#2563eb,#06b6d4); box-shadow: 0 10px 22px rgba(37,99,235,.24); }

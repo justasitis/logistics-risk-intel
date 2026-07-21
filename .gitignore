@@ -1,0 +1,31 @@
+# 환경 변수 / 시크릿
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / 프런트엔드 빌드
+node_modules/
+frontend/dist/
+
+# 패치/백업 산출물
+_backup_*/
+*.orig
+*.rej
+
+# 런타임 데이터 (샘플만 추적)
+data/*.json
+!data/*.sample.json
+backend/data/*.json
+!backend/data/*.sample.json
+
+# 기타
+.DS_Store
+Thumbs.db
+*.local

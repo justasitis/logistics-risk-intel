@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-06T01:00:00Z",
+  "source_stage": "EXTERNAL_GEMINI_CANDIDATES",
+  "generation_status": "SUCCESS",
+  "warnings": [],
+  "input_summary": {"total_articles": 100, "selected_articles": 30, "gemini_calls": 1},
+  "candidates": [
+    {
+      "candidate_id": "EXT-REDSEA001",
+      "cluster_hint": "red-sea-vessel-attack",
+      "headline": "홍해 상선 피격 재발",
+      "short_summary": "예멘 인근 홍해에서 상선 피격 사건이 보고되었다.",
+      "published_from": "2026-07-05",
+      "valid_to_hint": null,
+      "location_mentions": ["Red Sea", "Yemen"],
+      "corridor_mentions": ["Suez Canal", "Asia-Europe"],
+      "transport_mode_hints": ["SEA"],
+      "risk_keyword_hints": ["vessel attack", "rerouting"],
+      "evidence": [
+        {
+          "article_id": "ART-001",
+          "title": "Cargo vessel attacked in Red Sea",
+          "url": "https://example.com/article",
+          "source": "example",
+          "published_at": "2026-07-05"
+        }
+      ]
+    }
+  ]
+}

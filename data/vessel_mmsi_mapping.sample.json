@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.1-exact-vessel-name",
+  "generated_at": "2026-07-11T00:00:00Z",
+  "matching_rule": "EXACT_IF_VESSEL_NAME_TRIM_ONLY",
+  "mappings": [
+    {
+      "vessel_name": "M/V KIEL EXPRESS",
+      "normalized_vessel_name": "M/V KIEL EXPRESS",
+      "mmsi_no": "211123456",
+      "source": "MANUAL",
+      "notes": "샘플이며 실제 MMSI로 교체 필요",
+      "updated_at": "2026-07-11T00:00:00Z"
+    }
+  ]
+}
