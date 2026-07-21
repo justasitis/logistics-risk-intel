@@ -58,6 +58,14 @@ const reviewStatuses = ['PENDING', 'APPROVED', 'EDITED', 'REJECTED'] as const
             </td>
             <td>
               <b>{{ event.headline }}</b>
+              <div class="badges">
+                <span class="badge" :class="event.direction === 'RISK_DECREASE' ? 'decrease' : 'increase'">
+                  {{ event.direction === 'RISK_DECREASE' ? '리스크 감소' : '리스크 증가' }}
+                </span>
+                <span class="badge" :class="event.impact_path === 'INDIRECT' ? 'indirect' : 'direct'">
+                  {{ event.impact_path === 'INDIRECT' ? '간접(전이)' : '직접' }}
+                </span>
+              </div>
               <div class="small">{{ event.summary }}</div>
               <div class="small mono">{{ event.event_id }}</div>
             </td>
@@ -96,6 +104,12 @@ th { background: #f5f8fb; color: #486581; }
 select, button { padding: 6px 8px; border: 1px solid #bcccdc; border-radius: 5px; background: white; }
 .primary { border-color: #1d5fa7; background: #1d5fa7; color: white; }
 .small { color: #627d98; font-size: 11px; margin-top: 3px; }
+.badges { display: flex; gap: 4px; margin-top: 3px; }
+.badge { padding: 1px 7px; border-radius: 999px; font-size: 11px; }
+.badge.increase { background: #ffebee; color: #c62828; }
+.badge.decrease { background: #e8f5e9; color: #2e7d32; }
+.badge.direct { background: #e3f2fd; color: #1565c0; }
+.badge.indirect { background: #fff3e0; color: #ef6c00; }
 .mono { font-family: monospace; }
 .warning { color: #ef6c00; font-size: 11px; }
 </style>

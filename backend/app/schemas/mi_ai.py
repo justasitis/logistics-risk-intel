@@ -24,6 +24,9 @@ EventType = Literal[
     "OTHER",
 ]
 ReviewStatus = Literal["PENDING", "APPROVED", "EDITED", "REJECTED"]
+# v2.1: 리스크 방향 / 영향 경로 (기존 저장 Run 호환을 위해 기본값 제공)
+RiskDirection = Literal["RISK_INCREASE", "RISK_DECREASE"]
+ImpactPath = Literal["DIRECT", "INDIRECT"]
 
 
 class Evidence(BaseModel):
@@ -95,6 +98,8 @@ class RefinedMiEvent(BaseModel):
     status: EventStatus
     event_type: EventType
     severity: EventSeverity
+    direction: RiskDirection = "RISK_INCREASE"
+    impact_path: ImpactPath = "DIRECT"
     confidence: float = Field(ge=0, le=1)
     headline: str
     summary: str

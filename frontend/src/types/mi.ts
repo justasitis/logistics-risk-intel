@@ -50,6 +50,8 @@ export interface RefinedMiEvent {
   status: 'ACTIVE' | 'WATCH' | 'IMPROVING' | 'RESOLVED'
   event_type: string
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+  direction: 'RISK_INCREASE' | 'RISK_DECREASE'
+  impact_path: 'DIRECT' | 'INDIRECT'
   confidence: number
   headline: string
   summary: string

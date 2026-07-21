@@ -148,6 +148,9 @@ def refine_candidates(request: RefineRequest) -> RefineResponse:
     }
     allowed_severity = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
     allowed_mode = {"SEA", "AIR", "RAIL", "ROAD", "MULTIMODAL"}
+    # v2.1: 리스크 방향 / 영향 경로
+    allowed_direction = {"RISK_INCREASE", "RISK_DECREASE"}
+    allowed_impact_path = {"DIRECT", "INDIRECT"}
 
     events: list[RefinedMiEvent] = []
     warnings: list[str] = []
@@ -180,6 +183,21 @@ def refine_candidates(request: RefineRequest) -> RefineResponse:
             if str(item).upper() in allowed_mode
         ]
 
+        # direction/impact_path: 누락 시 기본값(관대한 디폴트), 잘못된 값은 거부하고 기본값+경고
+        raw_direction = str(raw.get("direction") or "").strip().upper()
+        if raw_direction and raw_direction not in allowed_direction:
+            warnings.append(
+                f"events[{index}] invalid direction '{raw.get('direction')}' rejected, default RISK_INCREASE applied"
+            )
+        direction = _normalize_enum(raw.get("direction"), allowed_direction, "RISK_INCREASE")
+
+        raw_impact_path = str(raw.get("impact_path") or "").strip().upper()
+        if raw_impact_path and raw_impact_path not in allowed_impact_path:
+            warnings.append(
+                f"events[{index}] invalid impact_path '{raw.get('impact_path')}' rejected, default DIRECT applied"
+            )
+        impact_path = _normalize_enum(raw.get("impact_path"), allowed_impact_path, "DIRECT")
+
         normalized = {
             **raw,
             "event_id": str(raw.get("event_id") or _event_id(cluster_key, valid_from)),
@@ -188,6 +206,8 @@ def refine_candidates(request: RefineRequest) -> RefineResponse:
             "status": _normalize_enum(raw.get("status"), allowed_status, "WATCH"),
             "event_type": _normalize_enum(raw.get("event_type"), allowed_type, "OTHER"),
             "severity": _normalize_enum(raw.get("severity"), allowed_severity, "LOW"),
+            "direction": direction,
+            "impact_path": impact_path,
             "confidence": max(0.0, min(1.0, _safe_float(raw.get("confidence"), 0.5))),
             "source_type": "INTERNAL_REFINED_MI",
             "first_seen_at": valid_from,
