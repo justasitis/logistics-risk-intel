@@ -263,21 +263,18 @@ def evaluate_schedule_anomalies(
             )
             severity = _max_severity(severity, signal_severity)
 
-        # 납기 초과: 현재 ETA(없으면 납품 예정일)가 납품 요청일을 넘기면
-        # 생산 영향 1차 근사 신호다. 납품 요청일이 없는 운송건은 판정하지 않는다.
+        # 납기 초과: 오로지 최종 도착지 납품 예정일(dlvy_eta)과 납품 요청일
+        # (dlvy_req_date)만 비교한다. 항구 ETA(current_eta)는 사용하지 않으며,
+        # 둘 중 하나라도 없으면 판정하지 않는다.
         delivery_req_date = _coerce_timestamp(
             record.get("delivery_request_date")
         )
         delivery_eta = _coerce_timestamp(record.get("delivery_eta"))
-        current_eta_ts = _coerce_timestamp(record.get("current_eta"))
-        effective_eta = (
-            current_eta_ts if current_eta_ts is not None else delivery_eta
-        )
 
         delivery_breach_days: Optional[int] = None
-        if delivery_req_date is not None and effective_eta is not None:
+        if delivery_req_date is not None and delivery_eta is not None:
             delivery_breach_days = int(
-                (effective_eta - delivery_req_date).days
+                (delivery_eta - delivery_req_date).days
             )
 
         if (
@@ -296,7 +293,7 @@ def evaluate_schedule_anomalies(
                     "delivery_request_date": (
                         delivery_req_date.date().isoformat()
                     ),
-                    "effective_eta": effective_eta.date().isoformat(),
+                    "delivery_eta": delivery_eta.date().isoformat(),
                     "severity": signal_severity,
                 }
             )
