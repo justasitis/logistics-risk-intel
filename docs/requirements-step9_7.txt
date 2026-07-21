@@ -1,1 +1,2 @@
-searoute>=1.5,<2
+# [주의] 이후 step9_11에서 searoute 1.4.3 호환으로 코드 수정됨 — 설치는 searoute==1.4.3 고정 (README 참조)
+searoute==1.4.3

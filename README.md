@@ -31,7 +31,10 @@ docs/                      # 각 단계 패치 README (참고용)
 백엔드 (프로젝트 루트에서):
 
 ```bash
-pip install fastapi uvicorn pandas numpy requests searoute "pydantic>=2.6"
+# 주의 1) searoute는 경유항로(stopby) 기능 호환을 위해 1.4.3 고정
+# 주의 2) 한글 Windows에서는 UTF-8 모드로 설치 (소스 배포판 빌드 시 cp949 오류 방지)
+set PYTHONUTF8=1
+pip install fastapi uvicorn pandas numpy requests folium searoute==1.4.3 "pydantic>=2.6" pydantic-settings httpx
 uvicorn api_server:app --host 127.0.0.1 --port 8000
 ```
 
