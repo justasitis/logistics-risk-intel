@@ -36,6 +36,8 @@ import VesselMmsiManager from '@/components/VesselMmsiManager.vue'
 
 import MarinesiaSharePointStatus from '@/components/MarinesiaSharePointStatus.vue'
 
+import InventoryImpactPanel from '@/components/InventoryImpactPanel.vue'
+
 
  
 
@@ -225,7 +227,7 @@ type WorkspaceMode = 'dashboard' | 'mi' | 'vessel'
 
 const activeWorkspace = ref<
 
-  'dashboard' | 'mi' | 'vessel'
+  'dashboard' | 'mi' | 'vessel' | 'inventory'
 
 >('dashboard')
 
@@ -2431,6 +2433,25 @@ onBeforeUnmount(() => {
 
  
 
+          <button
+
+            type="button"
+
+            class="workspace-tab"
+
+            :class="{ active: activeWorkspace === 'inventory' }"
+
+            @click="activeWorkspace = 'inventory'"
+
+          >
+
+            재고 영향
+
+          </button>
+
+
+ 
+
         </nav>
 
 
@@ -3144,7 +3165,7 @@ onBeforeUnmount(() => {
 
     <section
 
-      v-else
+      v-else-if="activeWorkspace === 'vessel'"
 
       class="mi-workspace-host vessel-workspace-host"
 
@@ -3157,6 +3178,20 @@ onBeforeUnmount(() => {
         :ais-items="matchedAisItems"
 
       />
+
+    </section>
+
+
+
+    <section
+
+      v-else
+
+      class="mi-workspace-host"
+
+    >
+
+      <InventoryImpactPanel />
 
     </section>
 

@@ -59,6 +59,8 @@ from backend.app.api.routes.marinesia import router as marinesia_router
 
 from backend.app.api.routes.stopby_routes import router as stopby_routes_router
 
+from backend.app.api.routes.inventory import router as inventory_router
+
 
  
 
@@ -187,6 +189,8 @@ app.include_router(mi_ai_router)
 app.include_router(marinesia_router)
 
 app.include_router(stopby_routes_router)
+
+app.include_router(inventory_router)
 
 app.include_router(
 
