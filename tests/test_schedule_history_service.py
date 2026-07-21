@@ -291,3 +291,38 @@ class TestBuildScheduleMetrics:
         ])
         result = build_schedule_metrics(snapshot, history, now=self.NOW)
         assert result.iloc[0]["eta_change_count"] == 0
+
+
+class TestDeliveryRequestDateSnapshot:
+    """dlvy_req_date는 운송 내 가장 이른 값(최소)이 대표 — 보수적 판정."""
+
+    def test_min_request_date_used(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(po_no="PO001", dlvy_req_date="2026-04-10T00:00:00"),
+            _info_row(po_no="PO002", dlvy_req_date="2026-03-24T00:00:00"),
+        ]))
+        assert snapshot.iloc[0]["delivery_request_date"] == pd.Timestamp(
+            "2026-03-24"
+        )
+
+    def test_request_date_with_missing_rows(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(po_no="PO001", dlvy_req_date=None),
+            _info_row(po_no="PO002", dlvy_req_date="2026-03-24T00:00:00"),
+        ]))
+        assert snapshot.iloc[0]["delivery_request_date"] == pd.Timestamp(
+            "2026-03-24"
+        )
+
+    def test_all_missing_request_date_is_nat(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(dlvy_req_date=None),
+        ]))
+        assert pd.isna(snapshot.iloc[0]["delivery_request_date"])
+
+    def test_delivery_eta_first_non_null_kept(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(po_no="PO001", dlvy_eta=None),
+            _info_row(po_no="PO002", dlvy_eta="20260316000000"),
+        ]))
+        assert snapshot.iloc[0]["delivery_eta"] == pd.Timestamp("2026-03-16")

@@ -161,6 +161,12 @@ function signedDays(value?: number | null): string {
   return `${value}일`
 }
 
+function deliveryBreachLabel(value?: number | null): string {
+  if (value === null || value === undefined) return '-'
+  if (value > 0) return `초과 +${value}일`
+  return '정상'
+}
+
 function severityClass(value?: string): string {
   return `severity-${String(value ?? 'NORMAL').toLowerCase()}`
 }
@@ -279,6 +285,12 @@ function miValidPeriod(impact: MiTransportImpact): string {
             <span>{{ event.severity }}</span>
             <span>ETA {{ signedDays(event.eta_net_delay_days) }}</span>
             <span>LT {{ signedDays(event.lead_time_variance_days) }}</span>
+            <span
+              v-if="(event.delivery_req_breach_days ?? 0) > 0"
+              class="anomaly-event-card__breach"
+            >
+              납기 초과 {{ signedDays(event.delivery_req_breach_days) }}
+            </span>
           </div>
 
           <div class="anomaly-event-card__system-id">
@@ -420,6 +432,24 @@ function miValidPeriod(impact: MiTransportImpact): string {
                 <dt>Lead Time 변화</dt>
                 <dd class="danger-text">
                   {{ signedDays(selectedTransport.lead_time_variance_days) }}
+                </dd>
+              </div>
+              <div>
+                <dt>납품 요청일</dt>
+                <dd>{{ formatDate(selectedTransport.delivery_request_date) }}</dd>
+              </div>
+              <div>
+                <dt>납품 예정일</dt>
+                <dd>{{ formatDate(selectedTransport.delivery_eta) }}</dd>
+              </div>
+              <div>
+                <dt>납기 초과</dt>
+                <dd
+                  :class="(selectedTransport.delivery_req_breach_days ?? 0) > 0
+                    ? 'danger-text'
+                    : ''"
+                >
+                  {{ deliveryBreachLabel(selectedTransport.delivery_req_breach_days) }}
                 </dd>
               </div>
               <div>
@@ -705,6 +735,12 @@ function miValidPeriod(impact: MiTransportImpact): string {
   font-size: 8px;
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.08);
+}
+
+.anomaly-event-card__meta span.anomaly-event-card__breach {
+  color: #b45309;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.14);
 }
 
 .anomaly-event-card__system-id {

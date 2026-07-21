@@ -38,6 +38,10 @@ class AnomalyThresholds:
     lead_time_warning_days: int = 3
     lead_time_high_days: int = 6
     lead_time_critical_days: int = 10
+    # 납기 초과(생산 영향)는 일정 지연보다 한 단계 빠르게 격상한다.
+    delivery_breach_medium_days: int = 3
+    delivery_breach_high_days: int = 7
+    delivery_breach_critical_days: int = 14
 
 
 def _is_missing(value: Any) -> bool:
@@ -125,6 +129,35 @@ def _severity_for_lt(
     if value >= thresholds.lead_time_warning_days:
         return "MEDIUM"
     return "NORMAL"
+
+
+def _severity_for_delivery_breach(
+    days: Optional[int],
+    thresholds: AnomalyThresholds,
+) -> str:
+    value = _safe_int(days)
+
+    if value >= thresholds.delivery_breach_critical_days:
+        return "CRITICAL"
+    if value >= thresholds.delivery_breach_high_days:
+        return "HIGH"
+    if value >= thresholds.delivery_breach_medium_days:
+        return "MEDIUM"
+    if value > 0:
+        return "LOW"
+    return "NORMAL"
+
+
+def _coerce_timestamp(value: Any) -> Optional[pd.Timestamp]:
+    """NaN/NaT/파싱 불가 값은 None으로, 유효 값은 Timestamp로."""
+    if _is_missing(value):
+        return None
+
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+
+    return parsed
 
 
 def _max_severity(*levels: str) -> str:
@@ -230,12 +263,52 @@ def evaluate_schedule_anomalies(
             )
             severity = _max_severity(severity, signal_severity)
 
+        # 납기 초과: 현재 ETA(없으면 납품 예정일)가 납품 요청일을 넘기면
+        # 생산 영향 1차 근사 신호다. 납품 요청일이 없는 운송건은 판정하지 않는다.
+        delivery_req_date = _coerce_timestamp(
+            record.get("delivery_request_date")
+        )
+        delivery_eta = _coerce_timestamp(record.get("delivery_eta"))
+        current_eta_ts = _coerce_timestamp(record.get("current_eta"))
+        effective_eta = (
+            current_eta_ts if current_eta_ts is not None else delivery_eta
+        )
+
+        delivery_breach_days: Optional[int] = None
+        if delivery_req_date is not None and effective_eta is not None:
+            delivery_breach_days = int(
+                (effective_eta - delivery_req_date).days
+            )
+
+        if (
+            delivery_breach_days is not None
+            and delivery_breach_days > 0
+        ):
+            signal_severity = _severity_for_delivery_breach(
+                delivery_breach_days, rules,
+            )
+
+            signals.append("DELIVERY_REQ_BREACH")
+            signal_details.append(
+                {
+                    "signal": "DELIVERY_REQ_BREACH",
+                    "breach_days": delivery_breach_days,
+                    "delivery_request_date": (
+                        delivery_req_date.date().isoformat()
+                    ),
+                    "effective_eta": effective_eta.date().isoformat(),
+                    "severity": signal_severity,
+                }
+            )
+            severity = _max_severity(severity, signal_severity)
+
         risk_score = min(
             100,
             (etd_recent + eta_recent) * 12
             + max(0, _safe_int(etd_net)) * 3
             + max(0, _safe_int(eta_net)) * 3
-            + max(0, _safe_int(lt_variance)) * 4,
+            + max(0, _safe_int(lt_variance)) * 4
+            + max(0, _safe_int(delivery_breach_days)) * 5,
         )
 
         record.update(
@@ -245,6 +318,7 @@ def evaluate_schedule_anomalies(
                 "etd_net_delay_days": etd_net,
                 "eta_net_delay_days": eta_net,
                 "lead_time_variance_days": lt_variance,
+                "delivery_req_breach_days": delivery_breach_days,
                 "anomaly_signals": signals,
                 "anomaly_count": len(signals),
                 "severity": severity,
@@ -261,6 +335,7 @@ def evaluate_schedule_anomalies(
             "REPEATED_ETA_DELAY": "ETA 반복 지연",
             "LEAD_TIME_ANOMALY": "Lead Time 증가",
             "LARGE_SCHEDULE_DELAY": "대규모 일정 지연",
+            "DELIVERY_REQ_BREACH": "납기 초과",
         }
 
         events.append(
@@ -298,6 +373,7 @@ def evaluate_schedule_anomalies(
                     record.get("projected_lead_time_days")
                 ),
                 "lead_time_variance_days": lt_variance,
+                "delivery_req_breach_days": delivery_breach_days,
                 "po_count": _safe_int(record.get("po_count")),
                 "item_count": _safe_int(record.get("item_count")),
                 "quantity_sum": record.get("quantity_sum"),
@@ -332,6 +408,7 @@ def build_dashboard_summary(
             "etd_repeated_delay": 0,
             "eta_repeated_delay": 0,
             "lead_time_anomaly": 0,
+            "delivery_req_breach": 0,
             "high_critical": 0,
             "anomaly_transports": 0,
         }
@@ -360,6 +437,14 @@ def build_dashboard_summary(
         errors="coerce",
     ).fillna(0)
 
+    delivery_breach_days = pd.to_numeric(
+        enriched_df.get(
+            "delivery_req_breach_days",
+            pd.Series(index=enriched_df.index, dtype=float),
+        ),
+        errors="coerce",
+    ).fillna(0)
+
     return {
         "active_transports": int(len(enriched_df)),
         "etd_repeated_delay": int(
@@ -370,6 +455,9 @@ def build_dashboard_summary(
         ),
         "lead_time_anomaly": int(
             (lead_time_variance >= 3).sum()
+        ),
+        "delivery_req_breach": int(
+            (delivery_breach_days > 0).sum()
         ),
         "high_critical": int(
             sum(

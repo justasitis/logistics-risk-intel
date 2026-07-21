@@ -251,6 +251,7 @@ class TestBuildDashboardSummary:
             "etd_repeated_delay": 0,
             "eta_repeated_delay": 0,
             "lead_time_anomaly": 0,
+            "delivery_req_breach": 0,
             "high_critical": 0,
             "anomaly_transports": 0,
         }
@@ -276,3 +277,150 @@ class TestBuildDashboardSummary:
         df["etd_delay_count_recent"] = None  # NaN 컬럼
         summary = build_dashboard_summary(df, [])
         assert summary["etd_repeated_delay"] == 0
+
+
+class TestDeliveryReqBreach:
+    """DELIVERY_REQ_BREACH — 현재 ETA(없으면 dlvy_eta)가 납품 요청일 초과."""
+
+    def test_breach_by_current_eta(self):
+        enriched, events = _evaluate(
+            [_metrics_row(
+                current_eta="2026-03-20T00:00:00",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        record = enriched.iloc[0]
+        assert record["anomaly_signals"] == ["DELIVERY_REQ_BREACH"]
+        assert record["delivery_req_breach_days"] == 4
+        assert record["severity"] == "MEDIUM"  # 3일 이상
+        assert events[0]["signal_details"][0]["breach_days"] == 4
+        assert (
+            events[0]["signal_details"][0]["delivery_request_date"]
+            == "2026-03-16"
+        )
+        assert "납기 초과" in events[0]["headline"]
+
+    def test_fallback_to_delivery_eta_when_no_current_eta(self):
+        # dlvy_eta는 데이터레이크 원본 형식(YYYYMMDDHHMMSS)도 파싱돼야 한다.
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta=None,
+                delivery_eta="20260320000000",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        record = enriched.iloc[0]
+        assert record["anomaly_signals"] == ["DELIVERY_REQ_BREACH"]
+        assert record["delivery_req_breach_days"] == 4
+
+    def test_current_eta_preferred_over_delivery_eta(self):
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta="2026-03-10T00:00:00",
+                delivery_eta="20260325000000",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        record = enriched.iloc[0]
+        assert record["anomaly_signals"] == []
+        assert record["delivery_req_breach_days"] == -6
+
+    def test_severity_mapping(self):
+        cases = [
+            ("2026-03-17", 1, "LOW"),
+            ("2026-03-19", 3, "MEDIUM"),
+            ("2026-03-23", 7, "HIGH"),
+            ("2026-03-30", 14, "CRITICAL"),
+        ]
+        for eta, days, expected in cases:
+            enriched, _ = _evaluate(
+                [_metrics_row(
+                    current_eta=f"{eta}T00:00:00",
+                    delivery_request_date="2026-03-16T00:00:00",
+                )]
+            )
+            record = enriched.iloc[0]
+            assert record["delivery_req_breach_days"] == days
+            assert record["severity"] == expected, f"days={days}"
+
+    def test_no_breach_when_eta_on_or_before_request(self):
+        for eta in ["2026-03-16T00:00:00", "2026-03-10T00:00:00"]:
+            enriched, events = _evaluate(
+                [_metrics_row(
+                    current_eta=eta,
+                    delivery_request_date="2026-03-16T00:00:00",
+                )]
+            )
+            record = enriched.iloc[0]
+            assert "DELIVERY_REQ_BREACH" not in record["anomaly_signals"], eta
+            assert record["severity"] == "NORMAL"
+
+    def test_skip_when_request_date_missing(self):
+        # 납품 요청일이 없는 운송건은 오탐 방지를 위해 판정하지 않는다.
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta="2026-06-01T00:00:00",
+                delivery_request_date=None,
+                delivery_eta=None,
+            )]
+        )
+        record = enriched.iloc[0]
+        assert record["anomaly_signals"] == []
+        assert record["delivery_req_breach_days"] is None
+        assert record["severity"] == "NORMAL"
+
+    def test_skip_when_eta_and_delivery_eta_missing(self):
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta=None,
+                delivery_eta=None,
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        record = enriched.iloc[0]
+        assert record["anomaly_signals"] == []
+        assert record["delivery_req_breach_days"] is None
+
+    def test_unparseable_dates_skipped(self):
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta="not-a-date",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        assert enriched.iloc[0]["delivery_req_breach_days"] is None
+
+    def test_risk_score_contribution(self):
+        # 초과 4일 * 5 = 20 (다른 지표 0)
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta="2026-03-20T00:00:00",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        assert enriched.iloc[0]["risk_score"] == 20
+
+    def test_negative_breach_days_not_added_to_risk_score(self):
+        enriched, _ = _evaluate(
+            [_metrics_row(
+                current_eta="2026-03-10T00:00:00",
+                delivery_request_date="2026-03-16T00:00:00",
+            )]
+        )
+        assert enriched.iloc[0]["risk_score"] == 0
+
+    def test_summary_counts_breach(self):
+        enriched, events = _evaluate([
+            _metrics_row(
+                trpr_no="T1", transport_key="SKBA|P1|T1",
+                current_eta="2026-03-20T00:00:00",
+                delivery_request_date="2026-03-16T00:00:00",
+            ),
+            _metrics_row(trpr_no="T2", transport_key="SKBA|P1|T2"),
+        ])
+        summary = build_dashboard_summary(enriched, events)
+        assert summary["delivery_req_breach"] == 1
+
+    def test_summary_empty_has_breach_key(self):
+        summary = build_dashboard_summary(pd.DataFrame(), [])
+        assert summary["delivery_req_breach"] == 0

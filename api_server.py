@@ -501,6 +501,10 @@ def schedule_overview(
 
             "current_etd", "current_eta",
 
+            "delivery_request_date", "delivery_eta",
+
+            "delivery_req_breach_days",
+
             "etd_initial", "eta_initial",
 
             "po_count", "item_count",

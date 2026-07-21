@@ -32,6 +32,14 @@ def _coalesce_datetime(*values: Any) -> pd.Timestamp:
     return pd.NaT
 
 
+def _min_datetime(series: pd.Series) -> pd.Timestamp:
+    """그룹 내 파싱 가능한 일시 중 가장 이른 값 (없으면 NaT)."""
+    parsed = pd.to_datetime(series, errors="coerce").dropna()
+    if parsed.empty:
+        return pd.NaT
+    return parsed.min()
+
+
 def _series(group: pd.DataFrame, column: str) -> pd.Series:
     return group[column] if column in group.columns else pd.Series(dtype=object)
 
@@ -91,7 +99,9 @@ def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True)
             "actual_atd": _coalesce_datetime(_first_non_null(_series(group, "atd"))),
             "current_eta": current_eta,
             "actual_ata": actual_ata,
-            "delivery_request_date": _coalesce_datetime(_first_non_null(_series(group, "dlvy_req_date"))),
+            # 운송 내 PO 라인이 여러 개면 가장 이른 납품 요청일을 대표로
+            # 사용한다 (보수적 판정 — 가장 빠른 납기를 먼저 넘는지 본다).
+            "delivery_request_date": _min_datetime(_series(group, "dlvy_req_date")),
             "delivery_eta": _coalesce_datetime(_first_non_null(_series(group, "dlvy_eta"))),
             "completed": completed,
             "cmpl_yn": cmpl_yn,

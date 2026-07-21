@@ -30,6 +30,7 @@ export interface ScheduleEvent {
   planned_lead_time_days?: number | null
   projected_lead_time_days?: number | null
   lead_time_variance_days?: number | null
+  delivery_req_breach_days?: number | null
   po_count?: number | null
   item_count?: number | null
   quantity_sum?: number | null
@@ -56,6 +57,9 @@ export interface TransportRecord {
   voyage_no?: string | null
   current_etd?: string | null
   current_eta?: string | null
+  delivery_request_date?: string | null
+  delivery_eta?: string | null
+  delivery_req_breach_days?: number | null
   etd_initial?: string | null
   eta_initial?: string | null
   po_count?: number | null
