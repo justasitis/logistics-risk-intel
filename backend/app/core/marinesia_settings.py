@@ -6,8 +6,11 @@ import os
 from pathlib import Path
 
 
+from backend.app.core.user_path import expand_username
+
+# {username} 은 실행 환경의 로그인 사용자명으로 자동 치환된다 (user_path.expand_username).
 DEFAULT_SHAREPOINT_ROOT = Path(
-    r"C:\Users\so23132\SK on\Global물류팀 - LogisticsRisk"
+    r"C:\Users\{username}\SK on\Global물류팀 - LogisticsRisk"
 )
 
 
@@ -26,10 +29,12 @@ class MarinesiaSettings:
 
 @lru_cache(maxsize=1)
 def get_marinesia_settings() -> MarinesiaSettings:
-    root_value = os.environ.get(
-        "MARINESIA_SHAREPOINT_ROOT",
-        str(DEFAULT_SHAREPOINT_ROOT),
-    ).strip()
+    root_value = expand_username(
+        os.environ.get(
+            "MARINESIA_SHAREPOINT_ROOT",
+            str(DEFAULT_SHAREPOINT_ROOT),
+        ).strip()
+    )
 
     return MarinesiaSettings(
         sharepoint_root=Path(root_value),

@@ -25,7 +25,10 @@ def _store_path() -> Path:
     ).strip()
 
     if configured:
-        return Path(configured).expanduser().resolve()
+        # {username} 은 현재 로그인 사용자명으로 치환 (SharePoint 동기화 경로 대응)
+        from backend.app.core.user_path import expand_username
+
+        return Path(expand_username(configured)).expanduser().resolve()
 
     return (
         _project_root()
