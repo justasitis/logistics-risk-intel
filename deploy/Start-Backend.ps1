@@ -13,7 +13,9 @@ $ErrorActionPreference = "Stop"
 $PythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $PidFile = Join-Path $ProjectRoot "backend.pid"
 $LogDir = Join-Path $ProjectRoot "logs"
-$LogFile = Join-Path $LogDir ("backend_" + (Get-Date -Format "yyyyMMdd") + ".log")
+$LogStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$LogFile = Join-Path $LogDir "backend_$LogStamp.log"
+$ErrFile = Join-Path $LogDir "backend_${LogStamp}_error.log"
 
 if (-not (Test-Path $PythonExe)) {
     throw "가상환경 Python을 찾을 수 없습니다: $PythonExe`npython -m venv .venv 후 패키지를 설치하세요."
@@ -40,7 +42,7 @@ try {
         -ArgumentList "-m", "uvicorn", "api_server:app", "--host", "127.0.0.1", "--port", "$Port" `
         -WorkingDirectory $ProjectRoot `
         -RedirectStandardOutput $LogFile `
-        -RedirectStandardError $LogFile `
+        -RedirectStandardError $ErrFile `
         -WindowStyle Hidden `
         -PassThru
 }
