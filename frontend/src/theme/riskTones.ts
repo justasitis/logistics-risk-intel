@@ -25,5 +25,5 @@ export const riskLabel = (severity?: RiskSeverity): string => {
 export const riskDotColor = (severity?: RiskSeverity): string => {
   const key = String(severity || 'WATCH').toUpperCase()
   const colors: Record<string, string> = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#eab308', LOW: '#10b981', WATCH: '#06b6d4' }
-  return colors[key] || colors.WATCH
+  return colors[key] ?? '#06b6d4'
 }

@@ -222,14 +222,14 @@ function locationRouteMatch(
 
     for (let index = 0; index < coordinates.length - 1; index += 1) {
       const first = localPointKm(
-        coordinates[index][0],
-        coordinates[index][1],
+        coordinates[index]![0]!,
+        coordinates[index]![1]!,
         centerLon,
         centerLat,
       )
       const second = localPointKm(
-        coordinates[index + 1][0],
-        coordinates[index + 1][1],
+        coordinates[index + 1]![0]!,
+        coordinates[index + 1]![1]!,
         centerLon,
         centerLat,
       )
@@ -292,8 +292,8 @@ function nearestRouteIndex(
 
   coordinates.forEach((coordinate, index) => {
     const distance = haversineKm(
-      coordinate[0],
-      coordinate[1],
+      coordinate[0]!,
+      coordinate[1]!,
       lon,
       lat,
     )
@@ -420,7 +420,7 @@ export function analyzeMiImpact(
     if (routeImpacts.length > 0) {
       const best = [...routeImpacts].sort(
         (left, right) => right.match_score - left.match_score,
-      )[0]
+      )[0]!
 
       impactedFeatures.push({
         ...feature,

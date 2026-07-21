@@ -538,8 +538,8 @@ function locationRouteMatch(
   for (const location of event.affected_locations) {
     coordinates.forEach((coordinate, index) => {
       const distance = haversineKm(
-        coordinate[0],
-        coordinate[1],
+        coordinate[0]!,
+        coordinate[1]!,
         location.lon,
         location.lat,
       )
@@ -596,8 +596,8 @@ function nearestRouteIndex(
 
   coordinates.forEach((coordinate, index) => {
     const distance = haversineKm(
-      coordinate[0],
-      coordinate[1],
+      coordinate[0]!,
+      coordinate[1]!,
       lon,
       lat,
     )
@@ -734,7 +734,7 @@ export function analyzeMiImpact(
     if (routeImpacts.length > 0) {
       const best = [...routeImpacts].sort(
         (a, b) => b.match_score - a.match_score,
-      )[0]
+      )[0]!
 
       impactedFeatures.push({
         ...feature,

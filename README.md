@@ -28,13 +28,19 @@ docs/                      # 각 단계 패치 README (참고용)
 
 ## 실행
 
+패키지 레지스트리: **npm·pip 모두 사내 Nexus(`http://10.242.199.4:8987`)를 사용**한다.
+- npm: VDI의 `.npmrc`가 Nexus를 가리키므로 `npm ci`/`npm install`은 그대로 동작한다.
+  `package-lock.json`의 resolved URL도 Nexus 경로로 유지되어 있다.
+- pip: Nexus의 PyPI 프록시를 index-url로 지정한다 (레포 이름은 사내 Nexus 설정에 맞게 확인).
+
 백엔드 (프로젝트 루트에서):
 
 ```bash
 # 주의 1) searoute는 경유항로(stopby) 기능 호환을 위해 1.4.3 고정
 # 주의 2) 한글 Windows에서는 UTF-8 모드로 설치 (소스 배포판 빌드 시 cp949 오류 방지)
+# 주의 3) 사내 Nexus PyPI 프록시 경유 (레포명 pypi-proxy는 실제 환경에 맞게 확인)
 set PYTHONUTF8=1
-pip install fastapi uvicorn pandas numpy requests folium searoute==1.4.3 "pydantic>=2.6" pydantic-settings httpx
+pip install --index-url http://10.242.199.4:8987/repository/pypi-proxy/simple --trusted-host 10.242.199.4 fastapi uvicorn pandas numpy requests folium searoute==1.4.3 "pydantic>=2.6" pydantic-settings httpx
 uvicorn api_server:app --host 127.0.0.1 --port 8000
 ```
 
@@ -42,7 +48,7 @@ uvicorn api_server:app --host 127.0.0.1 --port 8000
 
 ```bash
 cd frontend
-npm install
+npm ci             # lockfile 기준 설치 (Nexus 경유)
 npm run dev        # vite dev 서버, /api → 127.0.0.1:8000 프록시
 npm run build      # vue-tsc 타입체크 + vite build
 ```
