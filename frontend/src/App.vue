@@ -26,11 +26,11 @@ import AisUploadPanel from '@/components/AisUploadPanel.vue'
 
 import MiWorkspaceView from '@/views/MiWorkspaceView.vue'
 
-import ScheduleTimeline from '@/components/ScheduleTimeline.vue'
+import AnomalyMasterDetailPanel from '@/components/AnomalyMasterDetailPanel.vue'
+
+import '@/assets/anomaly-master-detail.css'
 
 import MiImpactPanel from '@/components/MiImpactPanel.vue'
-
-import CauseAnalysisPanel from '@/components/CauseAnalysisPanel.vue'
 
 import VesselMmsiManager from '@/components/VesselMmsiManager.vue'
 
@@ -2571,288 +2571,6 @@ onBeforeUnmount(() => {
 
         />
 
-      </section>
-
-
- 
-
-      <aside class="side-panel">
-
-        <div v-if="errorMessage" class="error-banner">
-
-          <strong>데이터 조회 실패</strong>
-
-          <span>{{ errorMessage }}</span>
-
-        </div>
-
-
- 
-
-        <MarinesiaSharePointStatus
-
-          :loading="marinesiaLoading"
-
-          :root-exists="marinesiaHealth?.root_exists ?? false"
-
-          :file-found="
-
-            marinesiaHealth?.latest_file_found ?? false
-
-          "
-
-          :source-file="marinesiaSourceFile"
-
-          :generated-at="marinesiaGeneratedAt"
-
-          :message="marinesiaMessage"
-
-          :error="marinesiaError"
-
-          :total="aisSummary.total"
-
-          :mappable="aisSummary.mappable"
-
-          :live="aisSummary.live"
-
-          :stale="aisSummary.stale"
-
-          @refresh="loadMarinesiaFromSharePoint(false)"
-
-        />
-
-
- 
-
-        <MiImpactPanel
-
-          v-if="approvedMiEvents.length"
-
-          :events="approvedMiEvents"
-
-          :impacts="miImpacts"
-
-          :summary="miImpactSummary"
-
-          :selected-event-id="selectedMiEvent?.event_id"
-
-          @select-event="selectMiEvent"
-
-        />
-
-
- 
-
-        <CauseAnalysisPanel
-
-          v-if="selectedTransport"
-
-          :transport="selectedTransport"
-
-          :candidates="selectedCauseCandidates"
-
-          @select-mi="selectMiEvent"
-
-        />
-
-
- 
-
-        <section class="panel-section">
-
-          <div class="section-heading">
-
-            <div>
-
-              <span class="eyebrow">OVERVIEW</span>
-
-              <h2>일정 이상 현황</h2>
-
-            </div>
-
-
- 
-
-            <button
-
-              type="button"
-
-              class="ghost-button"
-
-              :disabled="loading"
-
-              @click="loadDashboard(true)"
-
-            >
-
-              {{ loading ? '조회 중' : '새로고침' }}
-
-            </button>
-
-          </div>
-
-
- 
-
-          <div class="metrics-grid">
-
-            <article
-
-              v-for="metric in metrics"
-
-              :key="metric.label"
-
-              class="metric-card"
-
-              :class="`metric-${metric.tone}`"
-
-            >
-
-              <span>{{ metric.label }}</span>
-
-              <strong>{{ metric.value.toLocaleString() }}</strong>
-
-            </article>
-
-          </div>
-
-
- 
-
-          <div class="source-summary">
-
-            <span>
-
-              원본 {{ dashboard?.source_counts.info_rows ?? 0 }}행
-
-            </span>
-
-            <span>
-
-              변경이력 {{ dashboard?.source_counts.history_rows ?? 0 }}행
-
-            </span>
-
-            <span>
-
-              지도 {{ dashboard?.source_counts.map_routes ?? 0 }}개
-
-            </span>
-
-          </div>
-
-        </section>
-
-
- 
-
-        <section class="panel-section alerts-section">
-
-          <div class="section-heading">
-
-            <div>
-
-              <span class="eyebrow">EARLY WARNING</span>
-
-              <h2>일정 이상 이벤트</h2>
-
-            </div>
-
-
- 
-
-            <span class="event-count">
-
-              {{ events.length }}
-
-            </span>
-
-          </div>
-
-
- 
-
-          <div v-if="events.length" class="alert-list">
-
-            <button
-
-              v-for="event in events"
-
-              :key="eventSelectionKey(event)"
-
-              type="button"
-
-              class="alert-card"
-
-              :class="[
-
-                severityClass(event.severity),
-
-                {
-
-                  selected:
-
-                    selectedEventKey
-
-                    === eventSelectionKey(event),
-
-                },
-
-              ]"
-
-              @click="selectEvent(event)"
-
-            >
-
-              <div class="alert-level">
-
-                {{ event.severity }}
-
-              </div>
-
-
- 
-
-              <div class="alert-body">
-
-                <strong>{{ event.headline }}</strong>
-
-                <p>
-
-                  {{ event.pol || '-' }} → {{ event.pod || '-' }}
-
-                  · ETA {{ signedDays(event.eta_net_delay_days) }}
-
-                  · LT {{ signedDays(event.lead_time_variance_days) }}
-
-                </p>
-
-              </div>
-
-
- 
-
-              <span class="risk-score">
-
-                {{ event.risk_score }}
-
-              </span>
-
-            </button>
-
-          </div>
-
-
- 
-
-          <div v-else class="empty-list">
-
-            현재 조건에서 탐지된 일정 이상 이벤트가 없습니다.
-
-          </div>
-
-        </section>
-
 
  
 
@@ -2942,204 +2660,194 @@ onBeforeUnmount(() => {
 
         </section>
 
-
- 
-
-        <section class="panel-section shipment-section">
-
-          <span class="eyebrow">SELECTED TRANSPORT</span>
-
-          <h2>선택 운송 상세</h2>
+      </section>
 
 
  
 
-          <template v-if="selectedTransport">
+      <aside class="side-panel">
 
-            <div class="selected-severity">
+        <div v-if="errorMessage" class="error-banner">
 
-              <span
+          <strong>데이터 조회 실패</strong>
 
-                class="severity-pill"
+          <span>{{ errorMessage }}</span>
 
-                :class="severityClass(selectedTransport.severity)"
-
-              >
-
-                {{ selectedTransport.severity }}
-
-              </span>
+        </div>
 
 
  
 
-              <span>Risk {{ selectedTransport.risk_score }}</span>
+        <MarinesiaSharePointStatus
+
+          :loading="marinesiaLoading"
+
+          :root-exists="marinesiaHealth?.root_exists ?? false"
+
+          :file-found="
+
+            marinesiaHealth?.latest_file_found ?? false
+
+          "
+
+          :source-file="marinesiaSourceFile"
+
+          :generated-at="marinesiaGeneratedAt"
+
+          :message="marinesiaMessage"
+
+          :error="marinesiaError"
+
+          :total="aisSummary.total"
+
+          :mappable="aisSummary.mappable"
+
+          :live="aisSummary.live"
+
+          :stale="aisSummary.stale"
+
+          @refresh="loadMarinesiaFromSharePoint(false)"
+
+        />
+
+
+ 
+
+        <MiImpactPanel
+
+          v-if="approvedMiEvents.length"
+
+          :events="approvedMiEvents"
+
+          :impacts="miImpacts"
+
+          :summary="miImpactSummary"
+
+          :selected-event-id="selectedMiEvent?.event_id"
+
+          @select-event="selectMiEvent"
+
+        />
+
+
+ 
+
+
+        <section class="panel-section">
+
+          <div class="section-heading">
+
+            <div>
+
+              <span class="eyebrow">OVERVIEW</span>
+
+              <h2>일정 이상 현황</h2>
 
             </div>
 
 
  
 
-            <dl class="detail-grid">
+            <button
 
-              <div>
+              type="button"
 
-                <dt>Transportation No.</dt>
+              class="ghost-button"
 
-                <dd>{{ selectedTransport.trpr_no || '-' }}</dd>
+              :disabled="loading"
 
-              </div>
+              @click="loadDashboard(true)"
 
-              <div>
+            >
 
-                <dt>HBL</dt>
+              {{ loading ? '조회 중' : '새로고침' }}
 
-                <dd>{{ selectedTransport.hbl_no || '-' }}</dd>
+            </button>
 
-              </div>
-
-              <div>
-
-                <dt>Route</dt>
-
-                <dd>
-
-                  {{ selectedTransport.pol || '-' }}
-
-                  →
-
-                  {{ selectedTransport.pod || '-' }}
-
-                </dd>
-
-              </div>
-
-              <div>
-
-                <dt>Vessel</dt>
-
-                <dd>{{ selectedTransport.vessel_name || '-' }}</dd>
-
-              </div>
-
-              <div>
-
-                <dt>ETD</dt>
-
-                <dd>
-
-                  {{ formatDate(selectedTransport.current_etd) }}
-
-                </dd>
-
-              </div>
-
-              <div>
-
-                <dt>ETA</dt>
-
-                <dd class="danger-text">
-
-                  {{ formatDate(selectedTransport.eta_initial) }}
-
-                  →
-
-                  {{ formatDate(selectedTransport.current_eta) }}
-
-                </dd>
-
-              </div>
-
-              <div>
-
-                <dt>ETA 반복지연</dt>
-
-                <dd>
-
-                  {{ selectedTransport.eta_delay_count_recent ?? 0 }}회
-
-                </dd>
-
-              </div>
-
-              <div>
-
-                <dt>Lead Time 변화</dt>
-
-                <dd class="danger-text">
-
-                  {{ signedDays(
-
-                    selectedTransport.lead_time_variance_days,
-
-                  ) }}
-
-                </dd>
-
-              </div>
-
-              <div>
-
-                <dt>PO</dt>
-
-                <dd>{{ selectedTransport.po_count ?? 0 }}건</dd>
-
-              </div>
-
-              <div>
-
-                <dt>Item</dt>
-
-                <dd>{{ selectedTransport.item_count ?? 0 }}개</dd>
-
-              </div>
-
-            </dl>
+          </div>
 
 
  
 
-            <div class="signal-list">
+          <div class="metrics-grid">
 
-              <span
+            <article
 
-                v-for="signal in selectedTransport.anomaly_signals"
+              v-for="metric in metrics"
 
-                :key="signal"
+              :key="metric.label"
 
-              >
+              class="metric-card"
 
-                {{ signal }}
+              :class="`metric-${metric.tone}`"
 
-              </span>
+            >
 
-            </div>
+              <span>{{ metric.label }}</span>
 
+              <strong>{{ metric.value.toLocaleString() }}</strong>
 
- 
+            </article>
 
-            <ScheduleTimeline
-
-              :timeline="scheduleTimeline"
-
-              :loading="timelineLoading"
-
-              :error="timelineError"
-
-            />
-
-          </template>
+          </div>
 
 
  
 
-          <div v-else class="empty-list">
+          <div class="source-summary">
 
-            지도 경로나 이벤트를 선택하세요.
+            <span>
+
+              원본 {{ dashboard?.source_counts.info_rows ?? 0 }}행
+
+            </span>
+
+            <span>
+
+              변경이력 {{ dashboard?.source_counts.history_rows ?? 0 }}행
+
+            </span>
+
+            <span>
+
+              지도 {{ dashboard?.source_counts.map_routes ?? 0 }}개
+
+            </span>
 
           </div>
 
         </section>
+
+
+ 
+
+        <AnomalyMasterDetailPanel
+
+          :events="events"
+
+          :transports="transports"
+
+          :selected-transport="selectedTransport"
+
+          :selected-event-key="selectedEventKey"
+
+          :timeline="scheduleTimeline"
+
+          :timeline-loading="timelineLoading"
+
+          :timeline-error="timelineError"
+
+          :mi-events="approvedMiEvents"
+
+          :mi-impacts="miImpacts"
+
+          :cause-candidates="selectedCauseCandidates"
+
+          @select-event="selectEvent"
+
+          @select-mi="selectMiEvent"
+
+        />
 
       </aside>
 
