@@ -1,4 +1,4 @@
-﻿# Deploy-From-Local.ps1
+# Deploy-From-Local.ps1
 # 회사 로컬 PC(git clone)에서 VDI 프로젝트로 변경·신규 파일만 반영하는 증분 배포 스크립트.
 # robocopy /E 를 사용하며 /MIR, /PURGE 는 쓰지 않는다 (VDI 측 파일 삭제 없음).
 #
@@ -90,12 +90,23 @@ Write-Host "=========================================="
 if (-not (Test-Path $Source)) {
     throw @"
 VDI에서 로컬 프로젝트를 찾을 수 없습니다: $Source
-VDI 파일 탐색기에서 \\tsclient\C 가 보이는지(RDP 클라이언트 드라이브 공유) 확인하세요.
+VDI 파일 탐색기에서 \\Client\C$ 가 보이는지(RDP 클라이언트 드라이브 공유) 확인하세요.
 "@
 }
 if (-not (Test-Path $Target)) {
     throw "VDI 프로젝트 폴터를 찾을 수 없습니다: $Target"
 }
+
+# "...\deploy\.." 같은 비정규 경로가 npm 등 하위 도구를 실패시키므로 정규화한다.
+$Target = (Resolve-Path -LiteralPath $Target).Path
+$FrontendDir = Join-Path $Target "frontend"
+$BackendDir = Join-Path $Target "backend"
+$PythonExe = Join-Path $Target ".venv\Scripts\python.exe"
+$RequirementsFile = Join-Path $BackendDir "requirements.txt"
+$StopBackendScript = Join-Path $Target "deploy\Stop-Backend.ps1"
+$StartBackendScript = Join-Path $Target "deploy\Start-Backend.ps1"
+$LogRoot = Join-Path $Target "logs\deploy"
+
 if (-not (Test-Path $LogRoot)) {
     New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
 }
@@ -220,18 +231,27 @@ Write-Host "[4/5] 백엔드 의존성 확인 중..."
 if ($SkipPip) {
     Write-Host "-SkipPip 지정 - pip 단계 생략"
 }
-elseif ($RequirementsChanged) {
-    Write-Host "requirements.txt 변경됨 - pip install 실행"
-    if (-not (Test-Path $PythonExe)) {
-        throw "VDI 가상환경 Python을 찾을 수 없습니다: $PythonExe"
-    }
-    # searoute 소스 빌드 시 한글 Windows 인코딩 오류 방지
-    $env:PYTHONUTF8 = "1"
-    & $PythonExe -m pip install -r $RequirementsFile
-    if ($LASTEXITCODE -ne 0) { throw "Python 패키지 설치 실패 (사내 Nexus PyPI 확인)" }
-}
 else {
-    Write-Host "requirements.txt 변경 없음 - pip install 생략"
+    # 최초 배포 등으로 .venv가 없으면 자동 생성 (이 경우 패키지 설치가 반드시 필요)
+    if (-not (Test-Path $PythonExe)) {
+        Write-Host ".venv 가상환경이 없어 새로 생성합니다..."
+        & python -m venv (Join-Path $Target ".venv")
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $PythonExe)) {
+            throw ".venv 생성 실패 — python이 PATH에 등록되어 있는지 확인하세요."
+        }
+        $RequirementsChanged = $true
+    }
+
+    if ($RequirementsChanged) {
+        Write-Host "requirements.txt 변경됨 - pip install 실행"
+        # searoute 소스 빌드 시 한글 Windows 인코딩 오류 방지
+        $env:PYTHONUTF8 = "1"
+        & $PythonExe -m pip install -r $RequirementsFile
+        if ($LASTEXITCODE -ne 0) { throw "Python 패키지 설치 실패 (사내 Nexus PyPI 확인)" }
+    }
+    else {
+        Write-Host "requirements.txt 변경 없음 - pip install 생략"
+    }
 }
 
 # =====================================================

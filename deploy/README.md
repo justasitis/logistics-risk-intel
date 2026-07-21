@@ -17,7 +17,7 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 
 1. 로컬 PC: `git clone` → `C:\Work\logistics-risk-intel`
 2. VDI: `C:\dev\logistics-risk-intel` 에 프로젝트 배치 (zip 또는 본 스크립트 최초 실행)
-3. VDI: `python -m venv .venv` + 패키지 설치 (루트 README "실행" 참고)
+3. VDI: `.env` 작성 (`.env.example` 복사). `.venv`와 패키지는 배포 스크립트가 없으면 자동 생성하므로 수동 생성은 선택
 4. VDI: `frontend\npm ci` + `.env` 작성 (`.env.example` 복사)
 5. VDI 파일 탐색기에서 `\\Client\C$\Work\logistics-risk-intel` 이 보이는지 확인
    (RDP 클라이언트 드라이브 공유. 안 보이면 zip 반입 후 로컬 경로를 -Source로 지정)
@@ -84,5 +84,5 @@ robocopy(`/E`)는 삭제를 전파하지 않는다 — repo에서 지운 파일�
 ## 최초 1회 배포
 
 최초에는 GitHub zip을 VDI에 풀거나, 본 스크립트를 그대로 실행하면 전체가
-"New File"로 복사된다. 이후 `.venv` 생성·패키지 설치·`.env` 작성은
-루트 README "실행" 절차를 따른다.
+"New File"로 복사된다. `.venv`와 패키지 설치는 스크립트가 자동 수행하므로
+최초에도 `.env` 작성만 수동으로 하면 된다.
