@@ -1,61 +1,84 @@
-# VDI 배포 가이드
+# VDI 배포 런북
 
-변경·신규 파일만 VDI에 반영하는 증분 배포 방식. git은 로컬 PC까지만 사용하고,
+변경·신규 파일만 VDI에 반영하는 증분 배포. git은 로컬 PC까지만 쓰고,
 VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없음)로 한다.
 
-## 사전 조건
+## 구성 파일 (deploy/)
 
-- 로컬 PC: 이 repo를 git clone (예: `C:\Work\logistics-risk-intel`), `git pull` 가능
-- VDI: RDP 드라이브 리다이렉션 활성화 — 파일 탐색기에서 `\\tsclient\C\Work\logistics-risk-intel` 접근 가능해야 함
-- VDI 프로젝트: 예 `C:\dev\logistics-risk-intel` (최초 1회는 zip 풀어 전체 배치)
-- VDI `.venv`, `npm`, pip config(Nexus) 설정 완료
+| 파일 | 실행 위치 | 역할 |
+|---|---|---|
+| `01_Git-Pull.cmd` | 로컬 PC | GitHub 최신 코드 pull (로컬 변경 있으면 중단) |
+| `Deploy-From-Local.ps1` | VDI | 변경·신규 복사 → npm ci(조걶) → build → pip(조걶) → 재기동 |
+| `Start-Backend.ps1` | VDI | `.venv`로 백엔드 백그라운드 기동 (`backend.pid`, `logs\` 기록) |
+| `Stop-Backend.ps1` | VDI | `backend.pid`로 백엔드 종료 |
 
-## 운영 절차
+## 사전 조건 (최초 1회)
+
+1. 로컬 PC: `git clone` → `C:\Work\logistics-risk-intel`
+2. VDI: `C:\dev\logistics-risk-intel` 에 프로젝트 배치 (zip 또는 본 스크립트 최초 실행)
+3. VDI: `python -m venv .venv` + 패키지 설치 (루트 README "실행" 참고)
+4. VDI: `frontend\npm ci` + `.env` 작성 (`.env.example` 복사)
+5. VDI 파일 탐색기에서 `\\tsclient\C\Work\logistics-risk-intel` 이 보이는지 확인
+   (RDP 드라이브 리다이렉션. 안 보이면 zip 반입 후 로컬 경로를 -Source로 지정)
+
+## 일상 배포 절차
 
 ```
-[로컬 PC]  git pull                      (01_Git-Pull.cmd 사용 가능)
-[VDI]      Deploy-From-Local.ps1 -Preview   → 변경 예정 파일 확인
-[VDI]      Deploy-From-Local.ps1            → 실제 반영
+[로컬 PC]  01_Git-Pull.cmd
+[VDI]      Deploy-From-Local.ps1 -Preview     ← 변경 예정 파일 확인
+[VDI]      Deploy-From-Local.ps1              ← 실제 반영
 ```
 
-실행 (VDI PowerShell):
+VDI PowerShell 실행:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Deploy-From-Local.ps1 -Preview
-powershell -NoProfile -ExecutionPolicy Bypass -File Deploy-From-Local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\dev\logistics-risk-intel\deploy\Deploy-From-Local.ps1 -Preview
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\dev\logistics-risk-intel\deploy\Deploy-From-Local.ps1
 ```
 
-경로가 다르면 파라미터로 지정:
+## 스크립트 동작 상세 (5단계)
 
-```powershell
-... -Source "\\tsclient\C\Work\logistics-risk-intel" -Target "C:\dev\logistics-risk-intel"
-```
+1. **robocopy**: 신규(New File)·변경(Newer)만 복사. 코드 8 이상이면 실패 중단
+2. **npm ci**: `package.json`/`package-lock.json` 해시가 바뀐 경우에만 (사내 Nexus 경유)
+3. **npm run build**: VDI에서 빌드 (로컬 PC에서 빌드하지 않음)
+4. **pip install**: `backend/requirements.txt` 해시가 바뀐 경우에만 (`PYTHONUTF8=1` 자동 설정)
+5. **백엔드 재기동**: `deploy\Stop-Backend.ps1` → `Start-Backend.ps1` → `/api/health` 확인
 
-## 스크립트 동작
+### 부분 배포 스위치
 
-1. robocopy로 신규·변경 파일만 복사 (New File / Newer)
-2. `package.json`/`package-lock.json` 해시 변경 시에만 `npm ci`
-3. VDI에서 `npm run build`
-4. `backend/requirements.txt` 해시 변경 시에만 pip install (`PYTHONUTF8=1` 자동 설정)
-5. `-StopBackendScript`/`-StartBackendScript` 지정 시 백엔드 재기동 + 헬스체크(`/docs`)
+| 스위치 | 용도 |
+|---|---|
+| `-SkipFrontend` | 백엔드만 바뀐 배포 (npm 단계 전체 생략) |
+| `-SkipPip` | requirements 변경을 이번에 반영하지 않을 때 |
+| `-SkipRestart` | 재기동 없이 파일만 반영 |
 
 ## 복사 제외 대상 (repo 구조 기준)
 
 - 환경/빌드: `.git`, `node_modules`, `dist`, `.venv`, `__pycache__`, `logs`, `uploads`
-- VDI 런타임 데이터: `<root>/data`, `backend/data/mi_runs`
-- 런타임 파일: `.env`, `approved_mi_events.json`, `manual_coordinates.json`
-- **git 관리 data는 복사 대상에 포함**: `backend/app/data/mi_location_master.json`, `backend/data/*.sample.json`
+- VDI 런타임 데이터: `<root>\data`, `backend\data\mi_runs`
+- 런타임 파일: `.env`, `approved_mi_events.json`, `manual_coordinates.json`, `backend.pid`
+- **git 관리 data는 복사 대상에 포함**: `backend\app\data\mi_location_master.json`, `backend\data\*.sample.json`
 
 ## 파일 삭제·이름 변경 규칙 (중요)
 
-robocopy(`/E`)는 삭제를 전파하지 않는다. repo에서 파일이 삭제/리네임되면
-VDI에는 구 파일이 남는다. 규칙:
+robocopy(`/E`)는 삭제를 전파하지 않는다 — repo에서 지운 파일도 VDI에 남는다.
 
-1. 파일을 삭제/리네임하는 커밋에는 메시지에 `VDI 수동 삭제: <경로>` 를 적는다.
+1. 삭제/리네임 커밋에는 메시지에 `VDI 수동 삭제: <경로>` 를 적는다.
 2. 배포 후 VDI에서 해당 파일을 수동 삭제한다.
+
+## 트러블슈팅
+
+| 증상 | 확인 |
+|---|---|
+| `Source를 찾을 수 없음` | RDP 리다이렉션: VDI에서 `\\tsclient\C` 접근 확인. 안 되면 zip 풀고 `-Source`로 로컬 경로 지정 |
+| `npm ci 실패` | 사내 Nexus npm 레지스트리 연결, `.npmrc` 확인 |
+| `pip install 실패` | Nexus PyPI(`pypi-group-internal`) 확인, `PYTHONUTF8=1` 여부(스크립트가 자동 설정) |
+| 백엔드 헬스체크 실패 | `logs\backend_*.log` 확인. 포트 8000 점유 여부 (`netstat -ano \| findstr :8000`) |
+| 스크립트 실행 자체가 안 됨 | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` 또는 `-ExecutionPolicy Bypass` 사용 |
+| 배포 후 한글 깨짐 | ps1은 UTF-8 BOM+CRLF 형식 유지 필요 (편집 시 형식 보존) |
 
 ## 최초 1회 배포
 
-최초에는 증분이 아니라 전체가 필요하므로, GitHub에서 zip을 받아 VDI에 풀거나
-이 스크립트를 그대로 실행하면 전체가 "New File"로 복사된다(단, 제외 대상은 스킵).
-이후 `.venv` 생성 및 패키지 설치는 루트 README의 "실행" 절차를 따른다.
+최초에는 GitHub zip을 VDI에 풀거나, 본 스크립트를 그대로 실행하면 전체가
+"New File"로 복사된다. 이후 `.venv` 생성·패키지 설치·`.env` 작성은
+루트 README "실행" 절차를 따른다.

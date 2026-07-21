@@ -1,4 +1,5 @@
-@echo off
+﻿@echo off
+chcp 65001 >nul
 rem 로컬 PC에서 GitHub 최신 코드만 받아오는 스크립트.
 rem PROJECT 경로를 로컬 clone 위치에 맞게 수정하세요.
 setlocal EnableExtensions
