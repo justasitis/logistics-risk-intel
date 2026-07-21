@@ -1,0 +1,18 @@
+# Logistics Risk Intelligence — 백엔드 Python 의존성
+# 설치 (VDI, 사내 Nexus PyPI 그룹 경유 — pip config 설정되어 있으면 --index-url 생략 가능):
+#   set PYTHONUTF8=1
+#   pip install --index-url http://10.242.199.4:8987/repository/pypi-group-internal/simple --trusted-host 10.242.199.4 -r backend/requirements.txt
+#
+# searoute는 경유항로(stopby) 기능 호환을 위해 1.4.3 고정 (1.5+는 인자 불일치)
+
+fastapi==0.139.2
+uvicorn==0.51.0
+pandas==3.0.3
+numpy==2.5.1
+requests==2.34.2
+folium==0.20.0
+searoute==1.4.3
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
+httpx==0.28.1
