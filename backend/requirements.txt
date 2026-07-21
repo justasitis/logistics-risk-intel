@@ -16,3 +16,6 @@ pydantic==2.13.4
 pydantic-settings==2.14.2
 python-dotenv==1.2.2
 httpx==0.28.1
+
+# 테스트 전용 (운영 런타임에서는 불필요)
+pytest==9.1.1
