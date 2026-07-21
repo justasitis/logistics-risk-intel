@@ -5,9 +5,9 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 
 ## 사전 조건
 
-- 로컬 PC: 이 repo를 git clone (예: `C:\Work\LogisticsRisk`), `git pull` 가능
+- 로컬 PC: 이 repo를 git clone (예: `C:\Work\logistics-risk-intel`), `git pull` 가능
 - VDI: RDP 드라이브 리다이렉션 활성화 — 파일 탐색기에서 `\\tsclient\C\Work\LogisticsRisk` 접근 가능해야 함
-- VDI 프로젝트: 예 `D:\Projects\LogisticsRisk` (최초 1회는 zip 풀어 전체 배치)
+- VDI 프로젝트: 예 `C:\dev\logistics-risk-intel` (최초 1회는 zip 풀어 전체 배치)
 - VDI `.venv`, `npm`, pip config(Nexus) 설정 완료
 
 ## 운영 절차
@@ -28,7 +28,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Deploy-From-Local.ps1
 경로가 다르면 파라미터로 지정:
 
 ```powershell
-... -Source "\\tsclient\D\repo\logistics-risk-intel" -Target "C:\dev\logistics-risk-intel"
+... -Source "\\tsclient\C\Work\logistics-risk-intel" -Target "C:\dev\logistics-risk-intel"
 ```
 
 ## 스크립트 동작

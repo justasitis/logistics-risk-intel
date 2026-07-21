@@ -13,10 +13,10 @@ param(
     [switch]$Preview,
 
     # VDI에서 보이는 로컬 PC 프로젝트 (RDP 드라이브 리다이렉션)
-    [string]$Source = "\\tsclient\C\Work\LogisticsRisk",
+    [string]$Source = "\\tsclient\C\Work\logistics-risk-intel",
 
     # VDI 프로젝트
-    [string]$Target = "D:\Projects\LogisticsRisk",
+    [string]$Target = "C:\dev\logistics-risk-intel",
 
     # 백엔드 시작/종료 스크립트 (있으면 재기동 수행, 없으면 건너뛰고 안내만 출력)
     [string]$StopBackendScript = "",
