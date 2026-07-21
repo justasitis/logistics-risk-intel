@@ -24,8 +24,15 @@ def get_stopby_settings() -> StopbySettings:
         "south_africa",
     ).strip().lower()
 
-    if default_value not in {
-        "",
+    # 빈 문자열(`.env`에 `EUROPE_BLANK_STOPBY_DEFAULT=` 형태)은
+    # 미설정과 동일하게 기본값을 적용한다. 이전에는 빈 문자열이
+    # "비활성화"로 해석돼 유럽향 희망봉 기본 경유가 아무 경고 없이
+    # 꺼지는 문제가 있었다. 비활성화는 명시 값(none/off)으로만 한다.
+    if default_value in {"", "default"}:
+        default_value = "south_africa"
+    elif default_value in {"none", "off", "disabled"}:
+        default_value = ""
+    elif default_value not in {
         "south_africa",
         "suez",
     }:
