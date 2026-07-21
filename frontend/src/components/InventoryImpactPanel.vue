@@ -126,14 +126,19 @@ function onSlider(e: Event) {
             {{ riskLabelOf(item.item_id) }}
           </span>
         </div>
-        <div class="item-meta">{{ item.destination }} · {{ item.corridor }}</div>
+        <div class="item-meta">
+          {{ item.destination || item.item_id }} · {{ item.source === 'blap' ? 'B-LAP 실데이터' : '샘플 데이터' }}
+        </div>
         <div class="item-meta">
           재고 {{ item.on_hand_units.toLocaleString() }} / 미니멈 {{ item.min_level_units.toLocaleString() }}
+          <span v-if="item.params_missing" class="params-missing">기준값 미설정(가정값)</span>
         </div>
       </button>
     </div>
 
     <template v-if="result && selectedItem">
+      <p v-if="result.warning" class="warning-banner">{{ result.warning }}</p>
+
       <section class="whatif card">
         <div class="whatif-head">
           <span class="whatif-label">What-if: 추가 지연일</span>
@@ -377,6 +382,24 @@ function onSlider(e: Event) {
 .hitl-note {
   font-size: 12px;
   color: var(--li-text-faint);
+}
+.params-missing {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--li-risk-high-bg);
+  color: var(--li-risk-high);
+  border: 1px solid var(--li-risk-high-border);
+}
+.warning-banner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--li-radius-sm);
+  font-size: 12px;
+  background: var(--li-risk-high-bg);
+  color: var(--li-risk-high);
+  border: 1px solid var(--li-risk-high-border);
 }
 .hint {
   color: var(--li-text-muted);

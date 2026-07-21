@@ -21,6 +21,8 @@ export interface InventoryItem {
   on_hand_units: number
   min_level_units: number
   shipments: InventoryShipment[]
+  source?: 'blap' | 'sample'
+  params_missing?: boolean
 }
 
 export interface InventoryItemsResponse {
@@ -69,4 +71,5 @@ export interface SimulateResponse {
   series_current: SimSeriesPoint[]
   metrics: SimMetrics
   actions: SimAction[]
+  warning?: string
 }
