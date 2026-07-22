@@ -1,0 +1,26 @@
+﻿{
+  "schemaVersion": 1,
+  "exportedAt": "2026-07-16T22:28:11",
+  "sourceComputer": "so23132VH003",
+  "sourceTargetPath": "C:\\Users\\so23132\\SK on\\Global물류팀 - LogisticsRisk",
+  "sourceMountPoint": "C:\\Users\\so23132\\SK on\\Global물류팀 - LogisticsRisk",
+  "sourceURLNamespace": "https://skoncorp.sharepoint.com/sites/team_SK-ON_04000011/Shared Documents/",
+  "relativePathWithinMount": "",
+  "cloudTargetUrl": "https://skoncorp.sharepoint.com/sites/team_SK-ON_04000011/Shared Documents/LogisticsRisk",
+  "sourceScopeIds": [],
+  "complete": true,
+  "missingFields": [],
+  "parameters": {
+    "scope": "OPENFOLDER",
+    "siteId": "97610653-5850-4897-b0e1-a6c23b039fbf",
+    "webId": "4b756263-b3e3-4bd0-b354-b438524d0213",
+    "webUrl": "https://skoncorp.sharepoint.com/sites/team_SK-ON_04000011",
+    "folderName": "LogisticsRisk",
+    "tenantId": "c989ebff-c32d-46a1-9f91-cd4adf952e08",
+    "folderUrl": "/sites/team_SK-ON_04000011/Shared Documents/LogisticsRisk",
+    "listTitle": "Shared Documents",
+    "listTemplateTypeId": "101",
+    "folderId": "d76d91e1-5ed6-4a5b-b060-f02c757d122e",
+    "listId": "60da551a-ae54-4d08-a298-83b9c4ebf185"
+  }
+}

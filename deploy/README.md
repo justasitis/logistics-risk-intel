@@ -13,6 +13,22 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 | `Start-Backend.ps1` | VDI | `.venv`로 백엔드 백그라운드 기동 (`backend.pid`, `logs\` 기록) |
 | `Stop-Backend.ps1` | VDI | `backend.pid`로 백엔드 종료 |
 
+## 팀원 온보딩 (신규 사용자)
+
+앱은 SharePoint 동기화 폴터의 데이터(AIS, MI 후보, 수동 좌표)를 읽으므로,
+팀원은 먼저 **해당 SharePoint 폴터를 본인 PC에 동기화**해야 한다.
+
+1. `deploy/sharepoint-sync/` 의 두 파일을 팀원 PC에 전달
+2. 팀원 PC에서 실행:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Install-OneDriveSpecificFolderSync_v1.5.ps1
+```
+
+3. `C:\Users\<본인이름>\SK on\Global물류팀 - LogisticsRisk` 에 동기화 폴터가 생기면 완료
+   (앱의 `{username}` 자동 치환으로 별도 설정 없이 인식됨)
+4. 이후는 일반 배포 절차와 동일 (프로젝트 배치 → `.env` → `02_VDI-Deploy.cmd`)
+
 ## 사전 조건 (최초 1회)
 
 1. 로컬 PC: `git clone` → `C:\Work\logistics-risk-intel`
