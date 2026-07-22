@@ -19,7 +19,7 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 팀원은 먼저 **해당 SharePoint 폴터를 본인 PC에 동기화**해야 한다.
 
 1. `deploy/sharepoint-sync/` 의 두 파일을 팀원 PC에 전달
-2. 팀원 PC에서 실행:
+2. 팀원 PC에서 `Setup-SharePointSync.cmd` 를 더블클릭 (또는 아래 명령 실행):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Install-OneDriveSpecificFolderSync_v1.5.ps1
