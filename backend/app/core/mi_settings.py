@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from backend.app.core.user_path import expand_username
+
 
 def _bool_env(name: str, default: bool) -> bool:
     value = os.environ.get(name)
@@ -57,8 +59,10 @@ def get_mi_settings() -> MiSettings:
             1,
             int(os.environ.get("MI_VDI_MAX_CANDIDATES", "30")),
         ),
-        mi_run_store_dir=os.environ.get(
-            "MI_RUN_STORE_DIR",
-            "backend/data/mi_runs",
-        ).strip(),
+        mi_run_store_dir=expand_username(
+            os.environ.get(
+                "MI_RUN_STORE_DIR",
+                "backend/data/mi_runs",
+            ).strip()
+        ),
     )
