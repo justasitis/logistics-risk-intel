@@ -35,3 +35,8 @@ logs/
 
 # L2 수급 기준값 런타임 편집 파일 (샘플만 추적)
 backend/data/inventory_stock_params.json
+
+# PyInstaller 산출물
+build/work/
+build/dist/
+dist-package/

@@ -831,3 +831,25 @@ def schedule_timeline(
             ),
 
         ) from exc
+
+# 프런트엔드 정적 서빙 — frontend/dist가 있으면 / 에 마운트한다.
+
+# API 라우터는 위에서 먼저 등록되므로 /api/* 가 우선한다.
+
+# exe 패키징 시에는 spec이 frontend/dist를 _MEIPASS에 포함시킨다.
+
+_FRONTEND_DIST = _Path(__file__).resolve().parent / "frontend" / "dist"
+
+if _FRONTEND_DIST.exists():
+
+    from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+    app.mount(
+
+        "/",
+
+        _StaticFiles(directory=str(_FRONTEND_DIST), html=True),
+
+        name="frontend",
+
+    )
