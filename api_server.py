@@ -832,6 +832,44 @@ def schedule_timeline(
 
         ) from exc
 
+@app.get("/api/report/leadtime")
+def leadtime_report(
+    months: int = Query(default=12, ge=3, le=36),
+    forecast_months: int = Query(default=3, ge=1, le=6),
+    refresh: bool = Query(default=False),
+) -> dict[str, Any]:
+    """항로별 리드타임 리포트 (B-LAP 자동 집계)."""
+    key = f"leadtime|{months}|{forecast_months}"
+    if not refresh and key in _CACHE:
+        cached_at, payload = _CACHE[key]
+        if time.time() - cached_at <= CACHE_TTL_SECONDS:
+            return {**payload, "cache_hit": True}
+
+    try:
+        from services.leadtime_report_service import fetch_leadtime_report
+
+        payload = fetch_leadtime_report(
+            months=months,
+            forecast_months=forecast_months,
+        )
+        _CACHE[key] = (time.time(), payload)
+        return payload
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "리드타임 리포트 처리 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+ 
+
 # 프런트엔드 정적 서빙 — frontend/dist가 있으면 / 에 마운트한다.
 
 # API 라우터는 위에서 먼저 등록되므로 /api/* 가 우선한다.

@@ -38,6 +38,8 @@ import MarinesiaSharePointStatus from '@/components/MarinesiaSharePointStatus.vu
 
 import InventoryImpactPanel from '@/components/InventoryImpactPanel.vue'
 
+import LeadtimeReportPanel from '@/components/LeadtimeReportPanel.vue'
+
 
  
 
@@ -227,7 +229,7 @@ type WorkspaceMode = 'dashboard' | 'mi' | 'vessel'
 
 const activeWorkspace = ref<
 
-  'dashboard' | 'mi' | 'vessel' | 'inventory'
+  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report'
 
 >('dashboard')
 
@@ -2452,6 +2454,25 @@ onBeforeUnmount(() => {
 
  
 
+          <button
+
+            type="button"
+
+            class="workspace-tab"
+
+            :class="{ active: activeWorkspace === 'report' }"
+
+            @click="activeWorkspace = 'report'"
+
+          >
+
+            MI 리포트
+
+          </button>
+
+
+ 
+
         </nav>
 
 
@@ -2893,13 +2914,27 @@ onBeforeUnmount(() => {
 
     <section
 
-      v-else
+      v-else-if="activeWorkspace === 'inventory'"
 
       class="mi-workspace-host"
 
     >
 
       <InventoryImpactPanel />
+
+    </section>
+
+
+
+    <section
+
+      v-else
+
+      class="mi-workspace-host"
+
+    >
+
+      <LeadtimeReportPanel />
 
     </section>
 

@@ -1,0 +1,25 @@
+{
+  "groups": [
+    {
+      "group_id": "ADRIA_SUEZ",
+      "name": "아드리아해 항만 도착 / 수에즈 경유",
+      "arvl_codes": ["SIKOP", "ITGOA", "ITTRS", "HRRIJ", "SIKOP1"],
+      "stopby_match": ["SUEZ", "수에즈", "EGSCN"],
+      "stopby_exclude": []
+    },
+    {
+      "group_id": "ADRIA_CAPE",
+      "name": "아드리아해 항만 도착 / 희망봉 경유",
+      "arvl_codes": ["SIKOP", "ITGOA", "ITTRS", "HRRIJ", "SIKOP1"],
+      "stopby_match": ["CAPE", "희망봉", "GOOD HOPE", "ZACPT"],
+      "stopby_exclude": []
+    },
+    {
+      "group_id": "US_EAST",
+      "name": "미주 동안 항만 도착",
+      "arvl_codes": ["USNYC", "USSAV", "USCHS", "USBAL", "USNFK", "USBOS"],
+      "stopby_match": [],
+      "stopby_exclude": []
+    }
+  ]
+}

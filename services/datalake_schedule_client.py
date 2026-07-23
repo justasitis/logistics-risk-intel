@@ -27,6 +27,7 @@ INFO_SELECT_COLUMNS = [
     "carrier_cd", "carrier_nm", "po_no", "item_no", "item_cd", "item_nm",
     "dlvy_req_date", "dlvy_qty", "dlvy_unit", "booking_no", "vessel_nm",
     "voyage_no", "hbl_no", "mbl_no", "cntr_no", "dprt", "dprt_nm",
+    "onboard_date",
     "etd", "atd", "arvl", "arvl_nm", "eta", "eta_date", "ata",
     "to_stlc_cd", "to_stlc_nm", "dlvy_eta", "dlvy_ata", "final_pod",
     "final_pod_nm", "final_pod_eta_date", "cmpl_yn", "clsn_yn",
@@ -39,7 +40,7 @@ HISTORY_SELECT_COLUMNS = [
 ]
 
 INFO_DATE_COLUMNS = [
-    "dlvy_req_date", "etd", "atd", "eta", "eta_date", "ata",
+    "dlvy_req_date", "onboard_date", "etd", "atd", "eta", "eta_date", "ata",
     "dlvy_eta", "dlvy_ata", "final_pod_eta_date",
 ]
 HISTORY_DATE_COLUMNS = ["fr_date", "to_date", "ins_datetime"]
