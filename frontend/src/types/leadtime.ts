@@ -27,3 +27,27 @@ export interface LeadtimeReport {
   groups: LeadtimeGroup[]
   cache_hit?: boolean
 }
+
+// 월간 인사이트 초안 (Actify)
+export interface InsightSection {
+  key: string
+  title: string
+  body: string
+}
+
+export interface InsightDraft {
+  sections: InsightSection[]
+  monitoring_points: string[]
+  disclaimer: string
+}
+
+export interface InsightDraftResponse {
+  draft: InsightDraft
+  materials_summary: {
+    events_used: number
+    leadtime_used: boolean
+    summary_used: boolean
+  }
+  month: string
+  generated_at: string
+}

@@ -49,7 +49,9 @@ import numpy as np
 
 import pandas as pd
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
+
+from pydantic import BaseModel
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -863,6 +865,48 @@ def leadtime_report(
             status_code=500,
             detail=(
                 "리드타임 리포트 처리 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+ 
+
+class InsightDraftBody(BaseModel):
+    month: str | None = None
+    include_leadtime: bool = True
+
+
+@app.post("/api/report/insight-draft")
+def insight_draft(body: InsightDraftBody = Body(...)) -> dict[str, Any]:
+    """월간 인사이트 초안 자동 생성 (Actify)."""
+    if body.month is not None:
+        try:
+            date.fromisoformat(f"{body.month}-01")
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="month는 YYYY-MM 형식이어야 합니다",
+            )
+    try:
+        from backend.app.services.mi_insight_draft import (
+            ActifyNotConfiguredError,
+            generate_insight_draft,
+        )
+
+        return generate_insight_draft(
+            month=body.month,
+            include_leadtime=body.include_leadtime,
+        )
+    except ActifyNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "인사이트 초안 처리 실패: "
                 f"{type(exc).__name__}: {exc}"
             ),
         ) from exc

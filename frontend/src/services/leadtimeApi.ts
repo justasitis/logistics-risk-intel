@@ -1,4 +1,4 @@
-import type { LeadtimeReport } from '../types/leadtime'
+import type { InsightDraftResponse, LeadtimeReport } from '../types/leadtime'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -24,5 +24,18 @@ export async function getLeadtimeReport(
     await fetch(
       `${API_BASE}/api/report/leadtime?months=${months}&forecast_months=${forecastMonths}`,
     ),
+  )
+}
+
+export async function postInsightDraft(
+  month: string,
+  includeLeadtime: boolean,
+): Promise<InsightDraftResponse> {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/report/insight-draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month, include_leadtime: includeLeadtime }),
+    }),
   )
 }

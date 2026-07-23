@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { getLeadtimeReport } from '../services/leadtimeApi'
-import type { LeadtimeGroup, LeadtimeReport } from '../types/leadtime'
+import type { InsightDraftResponse, LeadtimeGroup, LeadtimeReport } from '../types/leadtime'
+import MiInsightDraftPanel from './MiInsightDraftPanel.vue'
 
 const report = ref<LeadtimeReport | null>(null)
+const insight = ref<InsightDraftResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 
@@ -65,6 +67,22 @@ function exportHtml() {
     })
     .join('')
   const defs = Object.values(r.definitions).map((d) => `<li>${escapeHtml(d)}</li>`).join('')
+  const insightHtml = (() => {
+    const draft = insight.value
+    if (!draft) return ''
+    const sectionsHtml = draft.draft.sections
+      .map((s) => `<h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.body)}</p>`)
+      .join('')
+    const points = draft.draft.monitoring_points
+      .map((p) => `<li>${escapeHtml(p)}</li>`)
+      .join('')
+    return `<h1>월간 인사이트 (${escapeHtml(draft.month)})</h1>
+<p class="meta">AI 생성 검토용 초안 · 생성 ${escapeHtml(draft.generated_at)}</p>
+${sectionsHtml}
+<h2>모니터링 포인트</h2><ul>${points}</ul>
+<p class="meta">${escapeHtml(draft.draft.disclaimer)}</p>
+<hr>`
+  })()
   const html = `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><title>물류 MI Report — 항로별 리드타임</title>
 <style>
@@ -78,6 +96,7 @@ ul{font-size:11px;color:#607086}
 </style></head><body>
 <h1>물류 MI Report — 항로별 리드타임</h1>
 <p class="meta">조회 시점 기준 자동 집계 · 출처: ${escapeHtml(r.source)} · 생성: ${escapeHtml(r.generated_at)}</p>
+${insightHtml}
 ${sections}
 <h2>정의</h2><ul>${defs}</ul>
 </body></html>`
@@ -114,6 +133,8 @@ ${sections}
     </p>
 
     <template v-if="report">
+      <MiInsightDraftPanel v-model:draft="insight" />
+
       <section v-for="group in report.groups" :key="group.group_id" class="group">
         <h3 class="group-name">{{ group.name }}</h3>
         <table>

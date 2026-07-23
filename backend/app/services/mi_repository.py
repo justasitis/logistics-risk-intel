@@ -38,3 +38,20 @@ class MiRunRepository:
         if not isinstance(value, dict):
             raise RuntimeError("stored MI run is invalid")
         return value
+
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        """저장된 run을 mtime 최신 순으로 조회 (깨진 파일은 건드너뛴다)."""
+        paths = sorted(
+            self.root.glob("*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )[:limit]
+        runs: list[dict[str, Any]] = []
+        for path in paths:
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict):
+                runs.append(value)
+        return runs
