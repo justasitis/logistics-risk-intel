@@ -29,6 +29,21 @@ if errorlevel 1 (
 
 echo.
 echo ==========================================
+echo   경로 표준화 (PC마다 다른 동기화 폴터명 보정)
+echo ==========================================
+echo.
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Repair-SharePointPath.ps1"
+
+if errorlevel 1 (
+    echo.
+    echo [주의] 경로 표준화에 실패했습니다.
+    echo 동기화가 완료된 뒤 Repair-SharePointPath.ps1 만 다시 실행하세요.
+    echo.
+)
+
+echo.
+echo ==========================================
 echo   설치 완료
 echo ==========================================
 echo.
