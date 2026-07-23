@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from backend.app.core.user_path import expand_username
+from backend.app.core.user_path import resolve_synced_path
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -59,7 +59,7 @@ def get_mi_settings() -> MiSettings:
             1,
             int(os.environ.get("MI_VDI_MAX_CANDIDATES", "30")),
         ),
-        mi_run_store_dir=expand_username(
+        mi_run_store_dir=resolve_synced_path(
             os.environ.get(
                 "MI_RUN_STORE_DIR",
                 "backend/data/mi_runs",

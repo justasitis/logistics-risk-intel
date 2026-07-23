@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import getpass
 import os
+from pathlib import Path
 
 
 def current_username() -> str:
@@ -20,3 +21,65 @@ def expand_username(value: str) -> str:
     if "{username}" not in value:
         return value
     return value.replace("{username}", current_username())
+
+
+def _find_synced_folder(home: Path) -> Path | None:
+    """OneDrive 루트 후보 아래에서 *LogisticsRisk* 폴터를 찾는다.
+
+    OneDrive는 PC/계정마다 동기화 폴터명을 다르게 만든다
+    (예: "Global물류팀 - LogisticsRisk", "SK on - LogisticsRisk").
+    AIS 또는 MI 하위 폴터가 있는 것을 우선한다.
+    """
+    if not home.exists():
+        return None
+    matches: list[Path] = []
+    for root in home.iterdir():
+        if not root.is_dir():
+            continue
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir() and "logisticsrisk" in child.name.lower():
+                matches.append(child)
+    if not matches:
+        return None
+    for candidate in matches:
+        if (candidate / "AIS").exists() or (candidate / "MI").exists():
+            return candidate
+    return matches[0]
+
+
+def resolve_synced_path(value: str) -> str:
+    """{username} 치환 후, 경로가 없으면 동기화 폴터명 차이를 흡수한다.
+
+    설정 경로에 *LogisticsRisk* 세그먼트가 포함되어 있고 실제 폴터가
+    다른 이름으로 동기화된 경우, 탐색된 실제 폴터명으로 교체한 경로를 반환한다.
+    찾지 못하면 원래 경로를 그대로 반환한다.
+    """
+    resolved = expand_username(value)
+    path = Path(resolved)
+    if path.exists():
+        return resolved
+
+    segment = next(
+        (part for part in path.parts if "logisticsrisk" in part.lower()),
+        None,
+    )
+    if segment is None:
+        return resolved
+
+    seg_idx = list(path.parts).index(segment)
+    if seg_idx < 2:
+        return resolved
+
+    homes = [Path(*path.parts[: seg_idx - 1]), Path.home()]
+    for home in homes:
+        found = _find_synced_folder(home)
+        if found is not None:
+            new_parts = [
+                found.name if part == segment else part for part in path.parts
+            ]
+            return str(Path(*new_parts))
+    return resolved

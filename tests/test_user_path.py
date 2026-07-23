@@ -4,7 +4,7 @@ from __future__ import annotations
 import getpass
 
 from backend.app.core import user_path
-from backend.app.core.user_path import current_username, expand_username
+from backend.app.core.user_path import current_username, expand_username, resolve_synced_path
 
 
 class TestCurrentUsername:
@@ -37,3 +37,70 @@ class TestExpandUsername:
 
     def test_empty_string(self):
         assert expand_username("") == ""
+
+
+class TestResolveSyncedPath:
+    """resolve_synced_path — PC마다 다른 OneDrive 동기화 폴터명 흡수."""
+
+    def _make(self, tmp_path, folder_name, with_ais=True):
+        root = tmp_path / "user" / "SK on" / folder_name
+        root.mkdir(parents=True)
+        if with_ais:
+            (root / "AIS").mkdir()
+        return root
+
+    def test_existing_path_returned_as_is(self, tmp_path):
+        real = self._make(tmp_path, "Global물류팀 - LogisticsRisk")
+        result = resolve_synced_path(str(real))
+        assert result == str(real)
+
+    def test_alternate_folder_name_recognized(self, tmp_path):
+        # 표준 이름으로 설정됐지만 실제로는 "SK on - LogisticsRisk"로 동기화된 경우
+        self._make(tmp_path, "SK on - LogisticsRisk")
+        configured = str(
+            tmp_path / "user" / "SK on" / "Global물류팀 - LogisticsRisk" / "MI" / "mi_runs"
+        )
+        result = resolve_synced_path(configured)
+        assert "SK on - LogisticsRisk" in result
+        assert result.endswith("mi_runs")
+
+    def test_canonical_folder_name_recognized(self, tmp_path):
+        # 반대: "SK on - ..."으로 설정됐지만 실제는 표준 이름
+        self._make(tmp_path, "Global물류팀 - LogisticsRisk")
+        configured = str(
+            tmp_path / "user" / "SK on" / "SK on - LogisticsRisk" / "manual_coordinates.json"
+        )
+        result = resolve_synced_path(configured)
+        assert "Global물류팀 - LogisticsRisk" in result
+        assert result.endswith("manual_coordinates.json")
+
+    def test_prefers_folder_with_ais_or_mi(self, tmp_path):
+        self._make(tmp_path, "LogisticsRisk-backup", with_ais=False)
+        self._make(tmp_path, "SK on - LogisticsRisk", with_ais=True)
+        configured = str(
+            tmp_path / "user" / "SK on" / "Global물류팀 - LogisticsRisk"
+        )
+        result = resolve_synced_path(configured)
+        assert "SK on - LogisticsRisk" in result
+
+    def test_not_found_returns_original(self, tmp_path):
+        configured = str(
+            tmp_path / "user" / "SK on" / "Global물류팀 - LogisticsRisk"
+        )
+        assert resolve_synced_path(configured) == configured
+
+    def test_no_logisticsrisk_segment_returns_original(self, tmp_path):
+        configured = str(tmp_path / "user" / "other" / "file.json")
+        assert resolve_synced_path(configured) == configured
+
+    def test_username_expansion_still_applied(self, tmp_path, monkeypatch):
+        self._make(tmp_path, "SK on - LogisticsRisk")
+        monkeypatch.setenv("USERNAME", "so23159")
+        user_dir = tmp_path / "so23159"
+        (user_dir / "SK on" / "SK on - LogisticsRisk" / "MI").mkdir(parents=True)
+        configured = str(
+            user_dir / "SK on" / "Global물류팀 - LogisticsRisk"
+        ).replace("so23159", "{username}")
+        result = resolve_synced_path(configured)
+        assert "so23159" in result
+        assert "SK on - LogisticsRisk" in result

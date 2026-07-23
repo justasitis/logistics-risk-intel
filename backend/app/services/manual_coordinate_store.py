@@ -26,9 +26,9 @@ def _store_path() -> Path:
 
     if configured:
         # {username} 은 현재 로그인 사용자명으로 치환 (SharePoint 동기화 경로 대응)
-        from backend.app.core.user_path import expand_username
+        from backend.app.core.user_path import resolve_synced_path
 
-        return Path(expand_username(configured)).expanduser().resolve()
+        return Path(resolve_synced_path(configured)).expanduser().resolve()
 
     return (
         _project_root()

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-from backend.app.core.user_path import expand_username
+from backend.app.core.user_path import resolve_synced_path
 
 # {username} 은 실행 환경의 로그인 사용자명으로 자동 치환된다 (user_path.expand_username).
 DEFAULT_SHAREPOINT_ROOT = Path(
@@ -29,7 +29,7 @@ class MarinesiaSettings:
 
 @lru_cache(maxsize=1)
 def get_marinesia_settings() -> MarinesiaSettings:
-    root_value = expand_username(
+    root_value = resolve_synced_path(
         os.environ.get(
             "MARINESIA_SHAREPOINT_ROOT",
             str(DEFAULT_SHAREPOINT_ROOT),
