@@ -46,6 +46,10 @@ def _series(group: pd.DataFrame, column: str) -> pd.Series:
 
 def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True) -> pd.DataFrame:
     if "trpr_no" not in info_df.columns:
+        if info_df.empty:
+            # 조회 결과 0건(예: 해당 법인 운송 없음)은 스키마 오류가
+            # 아니라 빈 Snapshot이다. 0행 DataFrame은 컬럼이 없을 수 있다.
+            return pd.DataFrame()
         raise ValueError("선적 Snapshot 필수 컬럼 누락: trpr_no")
 
     df = info_df.copy()

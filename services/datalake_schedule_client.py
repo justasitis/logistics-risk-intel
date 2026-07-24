@@ -27,6 +27,7 @@ INFO_SELECT_COLUMNS = [
     "carrier_cd", "carrier_nm", "po_no", "item_no", "item_cd", "item_nm",
     "dlvy_req_date", "dlvy_qty", "dlvy_unit", "booking_no", "vessel_nm",
     "voyage_no", "hbl_no", "mbl_no", "cntr_no", "dprt", "dprt_nm",
+    "cargo_type3",
     "onboard_date",
     "etd", "atd", "arvl", "arvl_nm", "eta", "eta_date", "ata",
     "to_stlc_cd", "to_stlc_nm", "dlvy_eta", "dlvy_ata", "final_pod",
@@ -38,6 +39,33 @@ HISTORY_SELECT_COLUMNS = [
     "cmpy_cd", "plnt_cd", "trpr_no", "his_type", "his_no",
     "fr_date", "to_date", "ins_datetime", "ins_person_id",
 ]
+
+# 법인 이름(cmpy_nm, UI 표기) ↔ 법인 코드(cmpy_cd) 매핑 — 단일 정의처.
+# 프런트 법인 필터는 이름 표기(SKO/SKBA/...)를 본번호와 혼용할 수 있으므로
+# 양쪽 모두 받아 cmpy_nm 기준으로 정규화한다.
+COMPANY_NAME_TO_CODE = {
+    "SKO": "S000",
+    "SKOH": "S210",
+    "SKBM": "S220",
+    "SKBA": "S330",
+    "SKOJ": "S930",
+    "SKOY": "S950",
+}
+COMPANY_CODE_TO_NAME = {
+    code: name for name, code in COMPANY_NAME_TO_CODE.items()
+}
+
+
+def normalize_company_name(value: Any) -> str:
+    """법인 코드(S000)가 들어오면 이름(SKO)으로 변환. 미등록 값은 원형 유지."""
+    text = str(value or "").strip()
+    return COMPANY_CODE_TO_NAME.get(text.upper(), text)
+
+
+def normalize_company_code(value: Any) -> str:
+    """법인 이름(SKO)이 들어오면 코드(S000)로 변환. 미등록 값은 원형 유지."""
+    text = str(value or "").strip()
+    return COMPANY_NAME_TO_CODE.get(text.upper(), text)
 
 INFO_DATE_COLUMNS = [
     "dlvy_req_date", "onboard_date", "etd", "atd", "eta", "eta_date", "ata",
@@ -65,13 +93,19 @@ def _parse_payload_to_rows(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict):
-        rows = payload.get("elements") or payload.get("data") or payload.get("rows") or payload.get("result")
-        if rows is None:
-            return [payload]
-        if isinstance(rows, dict):
-            return [rows]
-        if isinstance(rows, list):
-            return rows
+        # 봉투 키가 "존재하는지"로 판별한다. `or` 체인으로 찾으면
+        # {"elements": []} 같은 빈 결과 페이지가 falsy라서 빠져나가
+        # 봉투 자체를 1행으로 반환하는 오류가 있었다 (SKO처럼 조회
+        # 결과가 없는 History chunk에서 "필수 컬럼 누락" 오류 유발).
+        for key in ("elements", "data", "rows", "result"):
+            if key in payload:
+                rows = payload[key]
+                if isinstance(rows, dict):
+                    return [rows]
+                if isinstance(rows, list):
+                    return rows
+                return []
+        return [payload]
     raise RuntimeError(f"예상치 못한 Denodo 응답 형태: {type(payload)}")
 
 
@@ -178,7 +212,10 @@ def fetch_bl_info(
     if etd_from:
         filters.append(f"etd >= '{etd_from.strftime('%Y-%m-%d')}'")
     if companies:
-        expr = " or ".join(f"cmpy_nm = '{_escape_literal(v)}'" for v in companies)
+        expr = " or ".join(
+            f"cmpy_nm = '{_escape_literal(normalize_company_name(v))}'"
+            for v in companies
+        )
         filters.append(f"({expr})")
     if plants:
         expr = " or ".join(f"plnt_cd = '{_escape_literal(v)}'" for v in plants)
@@ -211,7 +248,10 @@ def fetch_bl_history(
     if changed_to:
         filters.append(f"ins_datetime < '{changed_to.strftime('%Y-%m-%d')}'")
     if company_codes:
-        expr = " or ".join(f"cmpy_cd = '{_escape_literal(v)}'" for v in company_codes)
+        expr = " or ".join(
+            f"cmpy_cd = '{_escape_literal(normalize_company_code(v))}'"
+            for v in company_codes
+        )
         filters.append(f"({expr})")
     if plant_codes:
         expr = " or ".join(f"plnt_cd = '{_escape_literal(v)}'" for v in plant_codes)

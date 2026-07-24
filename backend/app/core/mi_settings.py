@@ -24,6 +24,7 @@ class MiSettings:
     actify_verify_ssl: bool
     mi_max_candidates: int
     mi_run_store_dir: str
+    insight_draft_store_dir: str
 
     @property
     def actify_url(self) -> str:
@@ -63,6 +64,12 @@ def get_mi_settings() -> MiSettings:
             os.environ.get(
                 "MI_RUN_STORE_DIR",
                 "backend/data/mi_runs",
+            ).strip()
+        ),
+        insight_draft_store_dir=resolve_synced_path(
+            os.environ.get(
+                "INSIGHT_DRAFT_STORE_DIR",
+                "backend/data/insight_drafts",
             ).strip()
         ),
     )

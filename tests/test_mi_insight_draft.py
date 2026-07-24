@@ -17,6 +17,12 @@ def _allow_testclient_http(monkeypatch):
     monkeypatch.setattr(httpx.Client, "request", _REAL_HTTPX_REQUEST)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_draft_store(tmp_path, monkeypatch):
+    """초안 저장소를 테스트마다 격리 (기본 경로 오염 방지)."""
+    monkeypatch.setenv("INSIGHT_DRAFT_STORE_DIR", str(tmp_path / "drafts"))
+
+
 def _run_canonical(events):
     return {"stage": "REVIEWED", "canonical_payload": {"events": events}}
 
@@ -145,11 +151,12 @@ def test_api_insight_draft_ok(monkeypatch):
     monkeypatch.setattr(
         svc,
         "generate_insight_draft",
-        lambda month=None, include_leadtime=True: {
+        lambda month=None, include_leadtime=True, regenerate=False: {
             "draft": {"sections": [], "monitoring_points": [], "disclaimer": ""},
             "materials_summary": {"events_used": 0, "leadtime_used": False, "summary_used": False},
             "month": month or "2026-07",
             "generated_at": "2026-07-19T00:00:00",
+            "regenerated": True,
         },
     )
     client = TestClient(app)

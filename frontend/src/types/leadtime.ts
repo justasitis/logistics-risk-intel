@@ -25,6 +25,7 @@ export interface LeadtimeReport {
   definitions: Record<string, string>
   month_columns: LeadtimeMonthColumn[]
   groups: LeadtimeGroup[]
+  edited_cells?: string[]
   cache_hit?: boolean
 }
 
@@ -50,4 +51,7 @@ export interface InsightDraftResponse {
   }
   month: string
   generated_at: string
+  draft_id?: string
+  regenerated?: boolean
+  revised_at?: string
 }

@@ -1,4 +1,4 @@
-import type { InsightDraftResponse, LeadtimeReport } from '../types/leadtime'
+import type { InsightDraft, InsightDraftResponse, LeadtimeReport } from '../types/leadtime'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -30,12 +30,56 @@ export async function getLeadtimeReport(
 export async function postInsightDraft(
   month: string,
   includeLeadtime: boolean,
+  regenerate: boolean,
 ): Promise<InsightDraftResponse> {
   return parseResponse(
     await fetch(`${API_BASE}/api/report/insight-draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month, include_leadtime: includeLeadtime }),
+      body: JSON.stringify({
+        month,
+        include_leadtime: includeLeadtime,
+        regenerate,
+      }),
     }),
+  )
+}
+
+export async function getInsightDraft(month: string): Promise<InsightDraftResponse | null> {
+  const response = await fetch(
+    `${API_BASE}/api/report/insight-draft/${encodeURIComponent(month)}`,
+  )
+  if (response.status === 404) return null
+  return parseResponse(response)
+}
+
+export async function putInsightDraft(
+  month: string,
+  draft: InsightDraft,
+): Promise<InsightDraftResponse> {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/report/insight-draft/${encodeURIComponent(month)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft }),
+    }),
+  )
+}
+
+export async function putLeadtimeOverrides(
+  overrides: Record<string, number>,
+): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE}/api/report/leadtime/overrides`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ overrides }),
+    }),
+  )
+}
+
+export async function deleteLeadtimeOverrides(): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE}/api/report/leadtime/overrides`, { method: 'DELETE' }),
   )
 }

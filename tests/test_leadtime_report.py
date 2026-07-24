@@ -41,6 +41,7 @@ GROUPS = [
 def _row(**kw):
     base = {
         "dprt": "KRPUS", "arvl": "SIKOP", "stopby": "SUEZ", "stopby_nm": "",
+        "cargo_type3": "FCL",
         "onboard_date": None, "atd": None, "ata": None,
         "eta": None, "eta_date": None, "etd": None,
     }
@@ -124,6 +125,18 @@ def test_empty_dataframe():
     assert report["groups"] and report["month_columns"] == []
     assert all(row["cells"] == {} for g in report["groups"] for row in g["rows"])
     assert "actual_lt" in report["definitions"]
+
+
+def test_fcl_only_scope():
+    df = pd.DataFrame([
+        _row(cargo_type3="FCL", onboard_date="2026-05-10", ata="2026-06-09"),   # 포함
+        _row(cargo_type3="LCL", onboard_date="2026-05-10", ata="2026-06-19"),   # 제외
+        _row(cargo_type3=None, onboard_date="2026-05-10", ata="2026-06-19"),    # 미기재 제외
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 30.0
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 30.0  # LCL 40일 미반영
+    assert report["definitions"]["scope"].startswith("집계 대상: cargo_type3 == 'FCL'")
 
 
 # ---------- API ----------

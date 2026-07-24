@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ..core.mi_settings import get_mi_settings
 from .actify_client import ActifyClient
+from .insight_draft_store import InsightDraftStore, revised_now
 from .mi_refiner import _extract_json
 from .mi_repository import MiRunRepository
 
@@ -40,6 +41,8 @@ class InsightSection(BaseModel):
     key: str
     title: str
     body: str
+
+    model_config = {"extra": "forbid"}
 
 
 class InsightDraft(BaseModel):
@@ -193,15 +196,26 @@ def collect_schedule_summary() -> dict[str, Any] | None:
 def generate_insight_draft(
     month: str | None = None,
     include_leadtime: bool = True,
+    regenerate: bool = False,
 ) -> dict[str, Any]:
-    """재료 수집 → Actify 초안 생성 → 검증된 draft 반환."""
+    """재료 수집 → Actify 초안 생성 → 저장소 기록 후 반환.
+
+    동일 월 기존 초안이 있고 regenerate=False이면 Actify 호출 없이
+    기존 초안을 regenerated=False로 반환한다.
+    """
+    target_month = month or date.today().isoformat()[:7]
+    store = InsightDraftStore()
+
+    if not regenerate and store.exists(target_month):
+        record = store.load(target_month)
+        return {**record, "regenerated": False}
+
     settings = get_mi_settings()
     if not settings.configured:
         raise ActifyNotConfiguredError(
             "Actify(사내 Dify)가 설정되지 않았습니다. 환경변수를 확인하세요."
         )
 
-    target_month = month or date.today().isoformat()[:7]
     events = collect_mi_events(target_month)
     leadtime = (
         collect_leadtime_highlights(target_month) if include_leadtime else None
@@ -228,13 +242,39 @@ def generate_insight_draft(
         logger.error("인사이트 초안 스키마 검증 실패: %s / 원본=%s", exc, result.answer)
         raise RuntimeError("Actify 응답이 인사이트 스키마와 일치하지 않습니다") from exc
 
-    return {
-        "draft": draft.model_dump(),
-        "materials_summary": {
-            "events_used": len(events),
-            "leadtime_used": leadtime is not None,
-            "summary_used": schedule is not None,
+    record = store.save(
+        target_month,
+        {
+            "draft": draft.model_dump(),
+            "materials_summary": {
+                "events_used": len(events),
+                "leadtime_used": leadtime is not None,
+                "summary_used": schedule is not None,
+            },
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
         },
-        "month": target_month,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-    }
+    )
+    return {**record, "regenerated": True}
+
+
+def save_revised_draft(month: str, draft: dict[str, Any]) -> dict[str, Any]:
+    """편집본 저장 (PUT) — 스키마 검증 후 revised_at 갱신."""
+    allowed = {"sections", "monitoring_points", "disclaimer"}
+    unknown = set(draft) - allowed
+    if unknown:
+        raise ValueError(f"초안에 허용되지 않는 필드: {', '.join(sorted(unknown))}")
+    store = InsightDraftStore()
+    validated = InsightDraft.model_validate(draft)
+    try:
+        record = store.load(month)
+    except Exception:
+        record = {
+            "materials_summary": {
+                "events_used": 0,
+                "leadtime_used": False,
+                "summary_used": False,
+            },
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    record = {**record, "draft": validated.model_dump()}
+    return store.save(month, revised_now(record))

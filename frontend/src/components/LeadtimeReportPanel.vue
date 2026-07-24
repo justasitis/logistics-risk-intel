@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getLeadtimeReport } from '../services/leadtimeApi'
+import {
+  deleteLeadtimeOverrides,
+  getLeadtimeReport,
+  putLeadtimeOverrides,
+} from '../services/leadtimeApi'
 import type { InsightDraftResponse, LeadtimeGroup, LeadtimeReport } from '../types/leadtime'
 import MiInsightDraftPanel from './MiInsightDraftPanel.vue'
 
@@ -8,6 +12,11 @@ const report = ref<LeadtimeReport | null>(null)
 const insight = ref<InsightDraftResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
+
+// 셀 수동 편집 (서버 override 파일에 명시 저장)
+const editMode = ref(false)
+const editValues = ref<Record<string, string>>({})
+const savingCells = ref(false)
 
 async function load() {
   loading.value = true
@@ -27,6 +36,53 @@ function cellText(group: LeadtimeGroup, country: string, stat: string, month: st
   const row = group.rows.find((r) => r.country === country && r.stat === stat)
   const value = row?.cells[month]
   return value === undefined ? '' : String(value)
+}
+
+function cellKey(groupId: string, country: string, stat: string, month: string): string {
+  return `${groupId}|${country}|${stat}|${month}`
+}
+
+function isEdited(key: string): boolean {
+  return (report.value?.edited_cells ?? []).includes(key)
+}
+
+function onCellInput(key: string, e: Event) {
+  editValues.value[key] = (e.target as HTMLInputElement).value
+}
+
+async function saveCells() {
+  const overrides: Record<string, number> = {}
+  for (const [key, value] of Object.entries(editValues.value)) {
+    const num = Number(value)
+    if (value.trim() !== '' && Number.isFinite(num)) overrides[key] = num
+  }
+  savingCells.value = true
+  error.value = ''
+  try {
+    if (Object.keys(overrides).length) await putLeadtimeOverrides(overrides)
+    editValues.value = {}
+    editMode.value = false
+    await load()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '편집값 저장 실패'
+  } finally {
+    savingCells.value = false
+  }
+}
+
+async function resetCells() {
+  savingCells.value = true
+  error.value = ''
+  try {
+    await deleteLeadtimeOverrides()
+    editValues.value = {}
+    editMode.value = false
+    await load()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '편집값 초기화 실패'
+  } finally {
+    savingCells.value = false
+  }
 }
 
 const STATS = ['Avg', 'Min', 'Max'] as const
@@ -120,8 +176,15 @@ ${sections}
         </p>
       </div>
       <div class="actions">
-        <button class="btn" :disabled="loading" @click="load">새로고침</button>
-        <button class="btn" :disabled="!report" @click="exportHtml">HTML 낙출력</button>
+        <button class="btn" :disabled="loading || savingCells" @click="load">새로고침</button>
+        <button class="btn" :disabled="!report || savingCells" @click="editMode = !editMode">
+          {{ editMode ? '편집 취소' : '셀 편집' }}
+        </button>
+        <button v-if="editMode" class="btn primary" :disabled="savingCells" @click="saveCells">
+          {{ savingCells ? '저장 중...' : '편집값 저장' }}
+        </button>
+        <button class="btn" :disabled="!report || savingCells" @click="resetCells">편집값 되돌리기</button>
+        <button class="btn" :disabled="!report" @click="exportHtml">HTML 출력</button>
         <button class="btn" :disabled="!report" @click="doPrint">인쇄</button>
       </div>
     </div>
@@ -159,9 +222,20 @@ ${sections}
                 <td
                   v-for="m in report.month_columns"
                   :key="m.key"
-                  :class="{ forecast: m.kind === 'forecast' }"
+                  :class="{
+                    forecast: m.kind === 'forecast',
+                    edited: isEdited(cellKey(group.group_id, c.code, stat, m.key)),
+                  }"
                 >
-                  {{ cellText(group, c.code, stat, m.key) }}
+                  <input
+                    v-if="editMode"
+                    type="number"
+                    step="0.1"
+                    class="cell-input"
+                    :value="editValues[cellKey(group.group_id, c.code, stat, m.key)] ?? cellText(group, c.code, stat, m.key)"
+                    @input="onCellInput(cellKey(group.group_id, c.code, stat, m.key), $event)"
+                  />
+                  <template v-else>{{ cellText(group, c.code, stat, m.key) }}</template>
                 </td>
               </tr>
             </template>
@@ -252,6 +326,25 @@ td.forecast {
   background: var(--li-surface-blue);
   color: var(--li-blue);
   font-weight: 700;
+}
+td.edited {
+  text-decoration: underline dotted var(--li-risk-high) 2px;
+  text-underline-offset: 3px;
+}
+.cell-input {
+  width: 64px;
+  padding: 2px 4px;
+  border: 1px solid var(--li-blue);
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--li-text);
+  background: var(--li-surface-strong);
+}
+.btn.primary {
+  background: var(--li-blue);
+  border-color: transparent;
+  color: #fff;
 }
 td.country {
   font-weight: 700;

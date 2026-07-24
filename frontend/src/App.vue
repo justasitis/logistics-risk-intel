@@ -1664,7 +1664,7 @@ async function loadDashboard(forceRefresh = false) {
 
         maxEvents: 200,
 
-        maxMapRoutes: 300,
+        maxMapRoutes: 1000,
 
         refresh: forceRefresh,
 

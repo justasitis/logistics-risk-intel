@@ -51,7 +51,10 @@ import pandas as pd
 
 from fastapi import Body, FastAPI, HTTPException, Query
 
-from pydantic import BaseModel
+import json
+import os
+
+from pydantic import BaseModel, ValidationError
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -850,9 +853,11 @@ def leadtime_report(
     try:
         from services.leadtime_report_service import fetch_leadtime_report
 
-        payload = fetch_leadtime_report(
-            months=months,
-            forecast_months=forecast_months,
+        payload = _apply_leadtime_overrides(
+            fetch_leadtime_report(
+                months=months,
+                forecast_months=forecast_months,
+            )
         )
         _CACHE[key] = (time.time(), payload)
         return payload
@@ -875,6 +880,11 @@ def leadtime_report(
 class InsightDraftBody(BaseModel):
     month: str | None = None
     include_leadtime: bool = True
+    regenerate: bool = False
+
+
+class InsightDraftPutBody(BaseModel):
+    draft: dict[str, Any]
 
 
 @app.post("/api/report/insight-draft")
@@ -897,6 +907,7 @@ def insight_draft(body: InsightDraftBody = Body(...)) -> dict[str, Any]:
         return generate_insight_draft(
             month=body.month,
             include_leadtime=body.include_leadtime,
+            regenerate=body.regenerate,
         )
     except ActifyNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -910,6 +921,129 @@ def insight_draft(body: InsightDraftBody = Body(...)) -> dict[str, Any]:
                 f"{type(exc).__name__}: {exc}"
             ),
         ) from exc
+
+
+ 
+
+def _validate_month(month: str) -> None:
+    try:
+        date.fromisoformat(f"{month}-01")
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="month는 YYYY-MM 형식이어야 합니다",
+        )
+
+
+@app.get("/api/report/insight-draft/{month}")
+def get_insight_draft(month: str) -> dict[str, Any]:
+    """저장된 월간 인사이트 초안 복원."""
+    _validate_month(month)
+    from backend.app.services.insight_draft_store import (
+        InsightDraftNotFoundError,
+        InsightDraftStore,
+    )
+
+    try:
+        record = InsightDraftStore().load(month)
+        return {**record, "regenerated": False}
+    except InsightDraftNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"저장된 초안이 없습니다: {month}",
+        )
+
+
+@app.put("/api/report/insight-draft/{month}")
+def put_insight_draft(month: str, body: InsightDraftPutBody) -> dict[str, Any]:
+    """월간 인사이트 초안 편집본 저장 (revised_at 갱신)."""
+    _validate_month(month)
+    from backend.app.services.mi_insight_draft import save_revised_draft
+
+    try:
+        return save_revised_draft(month, body.draft)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"초안 스키마가 올바르지 않습니다: {exc}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "인사이트 초안 저장 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+LEADTIME_OVERRIDES_PATH = (
+    _Path(__file__).resolve().parent / "backend" / "data" / "leadtime_overrides.json"
+)
+
+
+def _load_leadtime_overrides() -> dict[str, float]:
+    if not LEADTIME_OVERRIDES_PATH.exists():
+        return {}
+    try:
+        data = json.loads(
+            LEADTIME_OVERRIDES_PATH.read_text(encoding="utf-8")
+        )
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_leadtime_overrides(overrides: dict[str, float]) -> None:
+    LEADTIME_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LEADTIME_OVERRIDES_PATH.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(overrides, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(tmp, LEADTIME_OVERRIDES_PATH)
+    # leadtime 캐시 무효화
+    for key in [k for k in _CACHE if k.startswith("leadtime|")]:
+        _CACHE.pop(key, None)
+
+
+def _apply_leadtime_overrides(payload: dict[str, Any]) -> dict[str, Any]:
+    """GET 응답에 수동 편집값 병합. edited_cells에 적용된 키 목록 반환."""
+    overrides = _load_leadtime_overrides()
+    if not overrides:
+        return {**payload, "edited_cells": []}
+    applied: list[str] = []
+    for group in payload.get("groups", []):
+        for row in group.get("rows", []):
+            for month in list(row.get("cells", {}).keys()):
+                key = (
+                    f"{group['group_id']}|{row['country']}"
+                    f"|{row['stat']}|{month}"
+                )
+                if key in overrides:
+                    row["cells"][month] = overrides[key]
+                    applied.append(key)
+    return {**payload, "edited_cells": applied}
+
+
+class LeadtimeOverridesBody(BaseModel):
+    overrides: dict[str, float]
+
+
+@app.put("/api/report/leadtime/overrides")
+def put_leadtime_overrides(body: LeadtimeOverridesBody) -> dict[str, Any]:
+    """리드타임 셀 수동 편집값 부분 병합 저장."""
+    overrides = _load_leadtime_overrides()
+    overrides.update(body.overrides)
+    _save_leadtime_overrides(overrides)
+    return {"saved": len(body.overrides), "total": len(overrides)}
+
+
+@app.delete("/api/report/leadtime/overrides")
+def delete_leadtime_overrides() -> dict[str, Any]:
+    """리드타임 수동 편집값 전체 초기화."""
+    _save_leadtime_overrides({})
+    return {"deleted": True}
 
 
  

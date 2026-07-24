@@ -40,3 +40,7 @@ backend/data/inventory_stock_params.json
 build/work/
 build/dist/
 dist-package/
+
+# L2/리포트 런타임 편집 파일
+backend/data/leadtime_overrides.json
+backend/data/insight_drafts/

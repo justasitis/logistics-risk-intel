@@ -159,6 +159,15 @@ PORT_COORDS: dict[str, tuple[float, float]] = {
 
     "CNDLC": (38.92, 121.64), "dalian": (38.92, 121.64),
 
+    # China — 단거리 구간 추가 (2026-07)
+    "CNZJG": (31.97, 120.40), "zhangjiagang": (31.97, 120.40),
+
+    "CNLYG": (34.75, 119.43), "lianyungang": (34.75, 119.43),
+
+    "CNDAF": (33.20, 120.46), "dafeng": (33.20, 120.46),
+
+    "CNSHK": (31.23, 121.47),
+
     "CNXMN": (24.48, 118.09), "xiamen": (24.48, 118.09),
 
     # China airports

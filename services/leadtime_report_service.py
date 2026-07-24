@@ -1,6 +1,7 @@
 """항로별 리드타임 리포트 자동 집계 (B-LAP bl_info 기반).
 
 L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 definitions를 함께 수정):
+- 집계 대상: cargo_type3 == 'FCL' 인 행만 (컨테이너 전적 — LCL 등 제외)
 - 월 그룹핑: onboard_date의 월 (없으면 atd의 월)
 - 실적(actual) 해상 L/T: ata - onboard_date (onboard_date 없으면 ata - atd), 일 단위
   * 완료 운송(ata 존재)만 집계. onboard 월 기준으로 귀속.
@@ -45,6 +46,7 @@ MONTH_LABELS = [
 
 DEFINITIONS = {
     "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T (본 집계는 해상 L/T만)",
+    "scope": "집계 대상: cargo_type3 == 'FCL' (컨테이너 전적) 운송만",
     "actual_lt": "실적 해상 L/T = ata - onboard_date (onboard_date 없으면 atd), 일 단위",
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
     "month_basis": "월 그룹핑 = onboard_date 월 (없으면 atd 월)",
@@ -130,6 +132,9 @@ def compute_leadtime_report(
 
     if info_df is not None and not info_df.empty:
         for row in info_df.to_dict(orient="records"):
+            # FCL(컨테이너 전적)만 집계 대상
+            if str(row.get("cargo_type3") or "").strip().upper() != "FCL":
+                continue
             country = _country_of(str(row.get("dprt") or ""))
             if country is None:
                 continue

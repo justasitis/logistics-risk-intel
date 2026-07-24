@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { postInsightDraft } from '../services/leadtimeApi'
+import { onMounted, ref, watch } from 'vue'
+import { getInsightDraft, postInsightDraft, putInsightDraft } from '../services/leadtimeApi'
 import type { InsightDraftResponse } from '../types/leadtime'
 
 const props = defineProps<{ draft: InsightDraftResponse | null }>()
@@ -10,18 +10,52 @@ const emit = defineEmits<{ 'update:draft': [value: InsightDraftResponse | null] 
 const month = ref(new Date().toISOString().slice(0, 7))
 const includeLeadtime = ref(true)
 const generating = ref(false)
+const saving = ref(false)
 const error = ref('')
+
+/** 저장된 초안 자동 복원 (탭 진입/월 변경 시, 없으면 조용히 비움) */
+async function restore() {
+  try {
+    const existing = await getInsightDraft(month.value)
+    emit('update:draft', existing)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '초안 복원 실패'
+  }
+}
+
+onMounted(restore)
+watch(month, restore)
 
 async function generate() {
   generating.value = true
   error.value = ''
   try {
-    const result = await postInsightDraft(month.value, includeLeadtime.value)
+    // 동일 월 기존 초안이 있으면 재생성(덮어쓰기)
+    const result = await postInsightDraft(
+      month.value,
+      includeLeadtime.value,
+      props.draft !== null,
+    )
     emit('update:draft', result)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '초안 생성 실패'
   } finally {
     generating.value = false
+  }
+}
+
+/** 편집본 명시 저장 (자동저장 없음 — HITL) */
+async function save() {
+  if (!props.draft) return
+  saving.value = true
+  error.value = ''
+  try {
+    const result = await putInsightDraft(month.value, props.draft.draft)
+    emit('update:draft', result)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '초안 저장 실패'
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -31,13 +65,18 @@ async function generate() {
     <div class="insight-head">
       <h3 class="insight-title">월간 인사이트 초안 (AI 생성 → 검토용)</h3>
       <div class="controls">
-        <input v-model="month" type="month" class="month-input" :disabled="generating" />
+        <input v-model="month" type="month" class="month-input" :disabled="generating || saving" />
         <label class="chk">
-          <input v-model="includeLeadtime" type="checkbox" :disabled="generating" />
+          <input v-model="includeLeadtime" type="checkbox" :disabled="generating || saving" />
           리드타임 포함
         </label>
-        <button class="btn primary" :disabled="generating" @click="generate">
-          {{ generating ? '초안 생성 중... (수 분 소요 가능)' : '인사이트 초안 생성' }}
+        <button class="btn primary" :disabled="generating || saving" @click="generate">
+          {{ generating
+            ? '초안 생성 중... (수 분 소요 가능)'
+            : props.draft ? '재생성 (덮어쓰기)' : '인사이트 초안 생성' }}
+        </button>
+        <button v-if="props.draft" class="btn" :disabled="generating || saving" @click="save">
+          {{ saving ? '저장 중...' : '편집본 저장' }}
         </button>
       </div>
     </div>
@@ -46,10 +85,12 @@ async function generate() {
 
     <template v-if="props.draft">
       <p class="materials">
-        재료: 승인 MI 이벤트 {{ props.draft.materials_summary.events_used }}건
+        {{ props.draft.draft_id ?? '' }}
+        · 재료: 승인 MI 이벤트 {{ props.draft.materials_summary.events_used }}건
         · 리드타임 {{ props.draft.materials_summary.leadtime_used ? '포함' : '미포함/실패' }}
         · 스케줄 요약 {{ props.draft.materials_summary.summary_used ? '포함' : '미포함/실패' }}
-        · 대상 월 {{ props.draft.month }} · 생성 {{ props.draft.generated_at }}
+        · 생성 {{ props.draft.generated_at }}
+        <span v-if="props.draft.revised_at">· 편집 저장 {{ props.draft.revised_at }}</span>
       </p>
 
       <div v-for="section in props.draft.draft.sections" :key="section.key" class="section-card">
@@ -72,6 +113,7 @@ async function generate() {
         {{ props.draft.draft.disclaimer || '이 초안은 검토용이며 최종 문서는 담당자가 확정합니다.' }}
       </p>
     </template>
+    <p v-else class="hint">저장된 초안이 없습니다. 대상 월을 선택하고 초안을 생성하세요.</p>
   </section>
 </template>
 
@@ -172,6 +214,10 @@ async function generate() {
   margin: 0;
   font-size: 12px;
   color: var(--li-risk-high);
+}
+.hint {
+  color: var(--li-text-muted);
+  font-size: 12px;
 }
 .error {
   color: var(--li-risk-critical);
