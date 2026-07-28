@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 import CauseAnalysisPanel from '@/components/CauseAnalysisPanel.vue'
+import WatchToggle from '@/components/WatchToggle.vue'
 import ScheduleTimeline from '@/components/ScheduleTimeline.vue'
 import type { CauseCandidate } from '@/types/causeAnalysis'
 import type {
@@ -310,6 +311,11 @@ function miValidPeriod(impact: MiTransportImpact): string {
           <div class="anomaly-master-detail__identity">
             <span class="eyebrow">SELECTED SHIPMENT</span>
             <h2>{{ selectedDisplayId }}</h2>
+            <WatchToggle
+              v-if="selectedTransport.hbl_no"
+              :hbl-no="selectedTransport.hbl_no"
+              :label="selectedDisplayId"
+            />
             <p>
               {{ displayRoute(selectedTransport) }}
               <span>·</span>

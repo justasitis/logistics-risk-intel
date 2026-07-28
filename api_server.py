@@ -1098,6 +1098,132 @@ def get_mi_registry_event(event_id: str) -> dict[str, Any]:
 
  
 
+# ---------- 관심화물(watchlist) + 알림 feed ----------
+
+SIGNAL_LABELS = {
+    "REPEATED_ETD_DELAY": "ETD 반복 지연",
+    "REPEATED_ETA_DELAY": "ETA 반복 지연",
+    "LEAD_TIME_ANOMALY": "Lead Time 증가",
+    "LARGE_SCHEDULE_DELAY": "대규모 일정 지연",
+    "DELIVERY_REQ_BREACH": "납기 초과",
+}
+
+
+class WatchlistBody(BaseModel):
+    id: str
+    label: str = ""
+
+
+@app.get("/api/watchlist")
+def get_watchlist() -> dict[str, Any]:
+    from backend.app.services import watchlist_store
+
+    return watchlist_store.load()
+
+
+@app.post("/api/watchlist", status_code=201)
+def add_watchlist(body: WatchlistBody) -> dict[str, Any]:
+    from backend.app.services import watchlist_store
+
+    try:
+        return watchlist_store.add(body.id, body.label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.delete("/api/watchlist/{item_id}")
+def delete_watchlist(item_id: str) -> dict[str, Any]:
+    from backend.app.services import watchlist_store
+
+    if not watchlist_store.remove(item_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"관심화물에 없습니다: {item_id}",
+        )
+    return {"deleted": item_id}
+
+
+def _norm_hbl(value: Any) -> str:
+    return str(value or "").replace(" ", "").upper()
+
+
+@app.get("/api/notifications")
+def get_notifications() -> dict[str, Any]:
+    """관심화물 알림 feed — 판단은 백엔드 단일 주체.
+
+    v1 알림 타입: DELIVERY_REQ_BREACH / SIGNAL / NOT_FOUND.
+    (확장 여지: shortage 등 Item 기준정보 연동 알람)
+    """
+    from backend.app.services import watchlist_store
+
+    watchlist = watchlist_store.load()
+    items = watchlist.get("items", [])
+    if not items:
+        return {"computed_at": datetime.now().isoformat(timespec="seconds"),
+                "cache_hit": False, "items": []}
+
+    # overview 파이프라인/캐시 재사용 (기본 파라미터 = 전체 법인)
+    overview = schedule_overview()
+
+    transports = overview.get("transports", [])
+    by_hbl = {
+        _norm_hbl(row.get("hbl_no")): row
+        for row in transports
+        if _norm_hbl(row.get("hbl_no"))
+    }
+
+    result_items: list[dict[str, Any]] = []
+    for item in items:
+        if item.get("type") != "hbl":
+            continue
+        hbl_no = item["id"]
+        row = by_hbl.get(_norm_hbl(hbl_no))
+        alerts: list[dict[str, Any]] = []
+
+        if row is None:
+            alerts.append(
+                {
+                    "type": "NOT_FOUND",
+                    "severity": "LOW",
+                    "message": "활성 운송에서 찾을 수 없습니다 (완료 또는 미존재 가능)",
+                    "value": None,
+                }
+            )
+        else:
+            breach = int(row.get("delivery_req_breach_days") or 0)
+            if breach > 0:
+                alerts.append(
+                    {
+                        "type": "DELIVERY_REQ_BREACH",
+                        "severity": "HIGH" if breach >= 7 else "MEDIUM",
+                        "message": f"납기 초과 +{breach}일",
+                        "value": breach,
+                    }
+                )
+            signals = row.get("anomaly_signals") or []
+            if signals:
+                labels = [SIGNAL_LABELS.get(s, str(s)) for s in signals]
+                alerts.append(
+                    {
+                        "type": "SIGNAL",
+                        "severity": str(row.get("severity") or "MEDIUM"),
+                        "message": "이상 신호: " + ", ".join(labels),
+                        "value": len(signals),
+                    }
+                )
+        result_items.append(
+            {"hbl_no": hbl_no, "label": item.get("label", ""), "alerts": alerts}
+        )
+
+    return {
+        "computed_at": datetime.now().isoformat(timespec="seconds"),
+        "cache_hit": bool(overview.get("cache_hit")),
+        "items": result_items,
+    }
+
+
+ 
+
 # 프런트엔드 정적 서빙 — frontend/dist가 있으면 / 에 마운트한다.
 
 # API 라우터는 위에서 먼저 등록되므로 /api/* 가 우선한다.

@@ -40,6 +40,8 @@ import InventoryImpactPanel from '@/components/InventoryImpactPanel.vue'
 
 import LeadtimeReportPanel from '@/components/LeadtimeReportPanel.vue'
 
+import NotificationCenter from '@/components/NotificationCenter.vue'
+
 
  
 
@@ -244,6 +246,26 @@ const errorMessage = ref('')
 const selectedCompany = ref('SKO')
 
 const selectedTransportKey = ref('')
+
+ 
+
+function handleSelectHbl(hblNo: string) {
+
+  const target = transports.value.find(
+
+    (t) => (t.hbl_no ?? '') === hblNo
+
+  )
+
+  if (target) {
+
+    selectedTransportKey.value = target.transport_key
+
+  }
+
+  activeWorkspace.value = 'dashboard'
+
+}
 
 
  
@@ -2533,6 +2555,10 @@ onBeforeUnmount(() => {
 
 
  
+
+        <NotificationCenter @select-hbl="handleSelectHbl" />
+
+
 
         <span class="live-badge">
 
