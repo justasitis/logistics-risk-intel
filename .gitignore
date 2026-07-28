@@ -44,3 +44,8 @@ dist-package/
 # L2/리포트 런타임 편집 파일
 backend/data/leadtime_overrides.json
 backend/data/insight_drafts/
+
+# 트레이 빌드 산출물/상태
+build/work-tray/
+build/dist-tray/
+tray/tray_state.json

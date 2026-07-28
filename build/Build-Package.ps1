@@ -127,6 +127,8 @@ if (-not (Test-Path $PythonExe)) {
 if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt 실패" }
 & $PythonExe -m pip install pyinstaller
 if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller 실패" }
+& $PythonExe -m pip install pystray windows-toasts pillow
+if ($LASTEXITCODE -ne 0) { throw "pip install tray deps 실패" }
 
 # =====================================================
 # [5/6] PyInstaller 빌드
@@ -138,6 +140,16 @@ try {
         --workpath (Join-Path $ProjectRoot "build\work") `
         --distpath (Join-Path $ProjectRoot "build\dist")
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller 빌드 실패 (exit $LASTEXITCODE)" }
+} finally {
+    Pop-Location
+}
+$TraySpecFile = Join-Path $ProjectRoot "build\logistics_risk_tray.spec"
+Push-Location $ProjectRoot
+try {
+    & $PythonExe -m PyInstaller $TraySpecFile --noconfirm `
+        --workpath (Join-Path $ProjectRoot "build\work-tray") `
+        --distpath (Join-Path $ProjectRoot "build\dist-tray")
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller 트레이 빌드 실패 (exit $LASTEXITCODE)" }
 } finally {
     Pop-Location
 }
@@ -154,6 +166,8 @@ New-Item -ItemType Directory -Force -Path $PackageAppDir | Out-Null
 # robocopy: 0~7이 정상 종료 코드
 & robocopy $PyiDist $PackageAppDir /E /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -gt 7) { throw "robocopy 실패 (exit $LASTEXITCODE)" }
+& robocopy (Join-Path $ProjectRoot "build\dist-tray\LogisticsRiskTray") (Join-Path $PackageAppDir "LogisticsRiskTray") /E /NFL /NDL /NJH /NJS | Out-Null
+if ($LASTEXITCODE -gt 7) { throw "robocopy(tray) 실패 (exit $LASTEXITCODE)" }
 
 # .env.example (팀원이 .env로 복사해 값 입력)
 $EnvExampleDst = Join-Path $PackageRoot ".env.example"

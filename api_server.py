@@ -1163,7 +1163,17 @@ def get_notifications() -> dict[str, Any]:
                 "cache_hit": False, "items": []}
 
     # overview 파이프라인/캐시 재사용 (기본 파라미터 = 전체 법인)
-    overview = schedule_overview()
+    # Query 기본값 객체가 아닌 실제 기본값을 명시 전달해야 한다.
+    overview = schedule_overview(
+        company=[],
+        etd_days=365,
+        history_days=180,
+        recent_window_days=14,
+        max_info_rows=20_000,
+        max_events=200,
+        max_map_routes=300,
+        refresh=False,
+    )
 
     transports = overview.get("transports", [])
     by_hbl = {
