@@ -266,13 +266,21 @@ def evaluate_schedule_anomalies(
         # 납기 초과: 오로지 최종 도착지 납품 예정일(dlvy_eta)과 납품 요청일
         # (dlvy_req_date)만 비교한다. 항구 ETA(current_eta)는 사용하지 않으며,
         # 둘 중 하나라도 없으면 판정하지 않는다.
+        # 납품 실적(dlvy_ata)이 찍힌 운송은 이미 납품됐으므로 판정하지 않는다.
         delivery_req_date = _coerce_timestamp(
             record.get("delivery_request_date")
         )
         delivery_eta = _coerce_timestamp(record.get("delivery_eta"))
+        delivery_actual = _coerce_timestamp(
+            record.get("delivery_actual_date")
+        )
 
         delivery_breach_days: Optional[int] = None
-        if delivery_req_date is not None and delivery_eta is not None:
+        if (
+            delivery_actual is None
+            and delivery_req_date is not None
+            and delivery_eta is not None
+        ):
             delivery_breach_days = int(
                 (delivery_eta - delivery_req_date).days
             )

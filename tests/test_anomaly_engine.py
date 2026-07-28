@@ -437,3 +437,17 @@ class TestDeliveryReqBreach:
     def test_summary_empty_has_breach_key(self):
         summary = build_dashboard_summary(pd.DataFrame(), [])
         assert summary["delivery_req_breach"] == 0
+
+    def test_delivered_transport_skips_breach(self):
+        # dlvy_ata(납품 실적)가 있으면 이미 납품됐으므로 판정하지 않는다.
+        enriched, events = _evaluate(
+            [_metrics_row(
+                delivery_eta="20260320000000",
+                delivery_request_date="2026-03-16T00:00:00",
+                delivery_actual_date="2026-03-18T00:00:00",
+            )]
+        )
+        record = enriched.iloc[0]
+        assert "DELIVERY_REQ_BREACH" not in record["anomaly_signals"]
+        assert record["delivery_req_breach_days"] is None
+        assert record["risk_score"] == 0

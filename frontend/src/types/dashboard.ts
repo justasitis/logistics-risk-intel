@@ -60,6 +60,12 @@ export interface TransportRecord {
   delivery_request_date?: string | null
   delivery_eta?: string | null
   delivery_req_breach_days?: number | null
+  /** 공급업첪명 유니크 목록 — 최대 3개 + "외 N개" (없으면 빈 문자열) */
+  sppl_names?: string
+  /** 품목명 유니크 목록 — 최대 3개 + "외 N개" (없으면 빈 문자열) */
+  item_names?: string
+  /** 품목 코드 유니크 전체 목록 (정렬됨, 없으면 빈 배열) */
+  item_cds?: string[]
   etd_initial?: string | null
   eta_initial?: string | null
   po_count?: number | null

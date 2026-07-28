@@ -170,7 +170,12 @@ class TestFetchBlHistoryEmptyChunk:
                 "cmpy_cd": "S000", "cmpy_nm": "SKO",
                 "plnt_cd": "P1", "trpr_no": "TR260001001",
                 "dprt": "KRPUS", "arvl": "SIKOP",
-                "etd": "2026-02-01", "eta": "2026-03-20",
+                "etd": "2026-02-01",
+                # 활성 운송이어야 하므로 ETA는 미래로 둔다.
+                "eta": (
+                    pd.Timestamp.now().normalize()
+                    + pd.Timedelta(days=30)
+                ).strftime("%Y-%m-%d"),
             }
         ]
         snapshot = build_transport_snapshot(pd.DataFrame(info_rows))

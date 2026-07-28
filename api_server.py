@@ -510,6 +510,8 @@ def schedule_overview(
 
             "delivery_req_breach_days",
 
+            "sppl_names", "item_names", "item_cds",
+
             "etd_initial", "eta_initial",
 
             "po_count", "item_count",

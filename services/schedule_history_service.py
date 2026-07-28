@@ -1,10 +1,22 @@
 """VDT_INB_BL_INFO Snapshot과 VDT_INB_BL_HIS 이력을 운송번호 단위 일정 지표로 변환."""
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 import pandas as pd
 
 TRANSPORT_KEY_COLUMNS = ["cmpy_cd", "plnt_cd", "trpr_no"]
+
+# current_eta가 이 일수보다 과거인 운송은 활성 목록에서 제외한다 (유령 운송).
+# 납품 완료/취소 처리가 안 된 채 남는 건들을 대시보드에서 치운다.
+ACTIVE_STALE_DAYS_DEFAULT = 30
+
+
+def _active_stale_days() -> int:
+    try:
+        return int(os.environ.get("ACTIVE_STALE_DAYS", ""))
+    except ValueError:
+        return ACTIVE_STALE_DAYS_DEFAULT
 
 
 def _first_non_null(series: pd.Series) -> Any:
@@ -17,6 +29,20 @@ def _first_non_null(series: pd.Series) -> Any:
 def _unique_join(series: pd.Series) -> str:
     values = {str(v).strip() for v in series.dropna() if str(v).strip()}
     return ", ".join(sorted(values))
+
+
+def _unique_values(series: pd.Series) -> list[str]:
+    return sorted(
+        {str(v).strip() for v in series.dropna() if str(v).strip()}
+    )
+
+
+def _capped_unique_join(series: pd.Series, limit: int = 3) -> str:
+    """유니크 값을 limit개까지 나열하고 초과분은 '외 N개'로 표시."""
+    values = _unique_values(series)
+    if len(values) > limit:
+        return ", ".join(values[:limit]) + f" 외 {len(values) - limit}개"
+    return ", ".join(values)
 
 
 def _safe_numeric_sum(series: pd.Series) -> float:
@@ -65,10 +91,17 @@ def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True)
         eta_date = _first_non_null(_series(group, "eta_date"))
         eta_raw = _first_non_null(_series(group, "eta"))
         ata_raw = _first_non_null(_series(group, "ata"))
+        dlvy_ata_raw = _first_non_null(_series(group, "dlvy_ata"))
         cmpl_yn = str(_first_non_null(_series(group, "cmpl_yn")) or "").strip().upper()
         current_eta = _coalesce_datetime(eta_date, eta_raw)
         actual_ata = _coalesce_datetime(ata_raw)
-        completed = cmpl_yn == "Y" or not pd.isna(actual_ata)
+        delivery_actual = _coalesce_datetime(dlvy_ata_raw)
+        # 완료 판정: 운송 완료 플래그, 항구 도착(ATA), 납품 완료(dlvy_ata)
+        completed = (
+            cmpl_yn == "Y"
+            or not pd.isna(actual_ata)
+            or not pd.isna(delivery_actual)
+        )
 
         record = {
             "transport_key": f"{cmpy_cd}|{plnt_cd}|{trpr_no}",
@@ -107,6 +140,11 @@ def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True)
             # 사용한다 (보수적 판정 — 가장 빠른 납기를 먼저 넘는지 본다).
             "delivery_request_date": _min_datetime(_series(group, "dlvy_req_date")),
             "delivery_eta": _coalesce_datetime(_first_non_null(_series(group, "dlvy_eta"))),
+            "delivery_actual_date": delivery_actual,
+            # 검색/표시용 집계: 공급업체·품목명은 최대 3개+외 N개, 품목 코드는 전체
+            "sppl_names": _capped_unique_join(_series(group, "sppl_nm")),
+            "item_names": _capped_unique_join(_series(group, "item_nm")),
+            "item_cds": _unique_values(_series(group, "item_cd")),
             "completed": completed,
             "cmpl_yn": cmpl_yn,
             "source_row_count": len(group),
@@ -115,7 +153,18 @@ def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True)
 
     snapshot = pd.DataFrame(records)
     if active_only and not snapshot.empty:
-        snapshot = snapshot[~snapshot["completed"]].copy()
+        # 유령 운송 제외: current_eta(eta_date→eta 순 fallback)가
+        # today - ACTIVE_STALE_DAYS보다 과거인 운송. ETA가 없는 건은
+        # 판정할 수 없으므로 남긴다. active_only=True일 때만 적용한다.
+        cutoff = (
+            pd.Timestamp.now().normalize()
+            - pd.Timedelta(days=_active_stale_days())
+        )
+        eta_values = pd.to_datetime(
+            snapshot["current_eta"], errors="coerce",
+        )
+        stale = eta_values.notna() & (eta_values < cutoff)
+        snapshot = snapshot[~snapshot["completed"] & ~stale].copy()
     return snapshot.reset_index(drop=True)
 
 

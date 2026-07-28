@@ -15,6 +15,18 @@ from services.schedule_history_service import (
 )
 
 
+def _days_ago(n: int) -> str:
+    return (pd.Timestamp.now().normalize() - pd.Timedelta(days=n)).strftime(
+        "%Y-%m-%d"
+    )
+
+
+def _days_ahead(n: int) -> str:
+    return (pd.Timestamp.now().normalize() + pd.Timedelta(days=n)).strftime(
+        "%Y-%m-%d"
+    )
+
+
 def _info_row(**overrides):
     row = {
         "cmpy_cd": "SKBA",
@@ -35,8 +47,10 @@ def _info_row(**overrides):
         "arvl_nm": "코페르",
         "vessel_nm": "TEST VESSEL",
         "voyage_no": "V001",
-        "etd": "2026-02-01",
-        "eta": "2026-03-01",
+        # 기본값은 활성 운송: stale 제외(ACTIVE_STALE_DAYS)에 걸리지 않는
+        # 미래 ETA. 과거 ETA가 필요한 테스트는 명시적으로 덮어쓴다.
+        "etd": _days_ago(10),
+        "eta": _days_ahead(30),
         "atd": None,
         "ata": None,
         "cmpl_yn": "N",
@@ -108,9 +122,11 @@ class TestBuildTransportSnapshot:
 
     def test_eta_date_preferred_over_eta(self):
         snapshot = build_transport_snapshot(pd.DataFrame([
-            _info_row(eta_date="2026-03-15", eta="2026-03-01"),
+            _info_row(eta_date=_days_ahead(15), eta=_days_ahead(10)),
         ]))
-        assert snapshot.iloc[0]["current_eta"] == pd.Timestamp("2026-03-15")
+        assert snapshot.iloc[0]["current_eta"] == pd.Timestamp(
+            _days_ahead(15)
+        )
 
 
 class TestNormalizeScheduleHistory:
@@ -326,3 +342,143 @@ class TestDeliveryRequestDateSnapshot:
             _info_row(po_no="PO002", dlvy_eta="20260316000000"),
         ]))
         assert snapshot.iloc[0]["delivery_eta"] == pd.Timestamp("2026-03-16")
+
+
+class TestDeliveryActualCompleted:
+    """dlvy_ata(납품 실적)가 있으면 완료 운송으로 제외."""
+
+    def test_dlvy_ata_excluded_from_active(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(trpr_no="T1", dlvy_ata="20260310000000"),
+            _info_row(trpr_no="T2"),
+        ]))
+        assert sorted(snapshot["trpr_no"]) == ["T2"]
+
+    def test_dlvy_ata_kept_when_not_active_only(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([_info_row(trpr_no="T1", dlvy_ata="20260310000000")]),
+            active_only=False,
+        )
+        assert len(snapshot) == 1
+        assert snapshot.iloc[0]["completed"]
+        assert snapshot.iloc[0]["delivery_actual_date"] == pd.Timestamp(
+            "2026-03-10"
+        )
+
+    def test_cmpl_and_ata_still_excluded(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(trpr_no="T1", cmpl_yn="Y"),
+            _info_row(trpr_no="T2", ata="2026-03-10"),
+            _info_row(trpr_no="T3"),
+        ]))
+        assert sorted(snapshot["trpr_no"]) == ["T3"]
+
+
+class TestStaleTransportExclusion:
+    """current_eta가 today-ACTIVE_STALE_DAYS(기본 30)보다 과거면 제외."""
+
+    def test_boundary_29_30_31_days(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(trpr_no="T29", eta=_days_ago(29)),
+            _info_row(trpr_no="T30", eta=_days_ago(30)),
+            _info_row(trpr_no="T31", eta=_days_ago(31)),
+        ]))
+        # cutoff(30일 전) 당일은 제외하지 않는다 (< 비교).
+        assert sorted(snapshot["trpr_no"]) == ["T29", "T30"]
+
+    def test_stale_not_applied_when_not_active_only(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([_info_row(trpr_no="T1", eta=_days_ago(90))]),
+            active_only=False,
+        )
+        assert len(snapshot) == 1
+
+    def test_missing_eta_kept(self):
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(trpr_no="T1", eta=None),
+        ]))
+        assert len(snapshot) == 1
+
+    def test_env_override(self, monkeypatch):
+        monkeypatch.setenv("ACTIVE_STALE_DAYS", "7")
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(trpr_no="T6", eta=_days_ago(6)),
+            _info_row(trpr_no="T8", eta=_days_ago(8)),
+        ]))
+        assert sorted(snapshot["trpr_no"]) == ["T6"]
+
+    def test_eta_date_preferred_for_stale_check(self):
+        # eta_date가 있으면 eta보다 우선한다.
+        snapshot = build_transport_snapshot(pd.DataFrame([
+            _info_row(
+                trpr_no="T1",
+                eta=_days_ago(90),
+                eta_date=_days_ago(5),
+            ),
+        ]))
+        assert len(snapshot) == 1
+
+
+class TestSearchFieldAggregation:
+    """sppl_names/item_names(최대 3개+외 N), item_cds 집계."""
+
+    def test_unique_and_sorted(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([
+                _info_row(
+                    po_no="PO1",
+                    sppl_nm="공급B", item_nm="품목B", item_cd="IB",
+                ),
+                _info_row(
+                    po_no="PO2",
+                    sppl_nm="공급A", item_nm="품목A", item_cd="IA",
+                ),
+                _info_row(
+                    po_no="PO3",
+                    sppl_nm="공급A", item_nm="품목A", item_cd="IA",
+                ),
+            ]),
+            active_only=False,
+        )
+        record = snapshot.iloc[0]
+        assert record["sppl_names"] == "공급A, 공급B"
+        assert record["item_names"] == "품목A, 품목B"
+        assert record["item_cds"] == ["IA", "IB"]
+
+    def test_cap_at_three_with_overflow_count(self):
+        rows = [
+            _info_row(
+                po_no=f"PO{i}",
+                sppl_nm=f"공급{i}", item_nm=f"품목{i}", item_cd=f"I{i}",
+            )
+            for i in range(5)
+        ]
+        snapshot = build_transport_snapshot(
+            pd.DataFrame(rows), active_only=False,
+        )
+        record = snapshot.iloc[0]
+        assert record["sppl_names"] == "공급0, 공급1, 공급2 외 2개"
+        assert record["item_names"] == "품목0, 품목1, 품목2 외 2개"
+        assert record["item_cds"] == ["I0", "I1", "I2", "I3", "I4"]
+
+    def test_missing_columns_give_empty_values(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([_info_row()]), active_only=False,
+        )
+        record = snapshot.iloc[0]
+        # sppl_nm/item_nm 컬럼은 없고 item_cd만 있는 입력
+        assert record["sppl_names"] == ""
+        assert record["item_names"] == ""
+        assert record["item_cds"] == ["ITEM001"]
+
+    def test_blank_values_ignored(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([
+                _info_row(po_no="PO1", sppl_nm="  ", item_nm=None),
+                _info_row(po_no="PO2", sppl_nm="공급A", item_nm="품목A"),
+            ]),
+            active_only=False,
+        )
+        record = snapshot.iloc[0]
+        assert record["sppl_names"] == "공급A"
+        assert record["item_names"] == "품목A"

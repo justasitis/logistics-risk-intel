@@ -68,6 +68,8 @@ function normalized(value: unknown): string {
 }
 
 function searchableEventText(event: ScheduleEvent): string {
+  // 공급업체/품목 검색은 transports의 확장 필드(선택키로 조인)를 통해 매칭
+  const transport = transportByKey.value.get(event.transport_key)
   return normalized([
     event.hbl_no,
     event.trpr_no,
@@ -79,8 +81,15 @@ function searchableEventText(event: ScheduleEvent): string {
     event.vessel_name,
     event.primary_signal,
     ...(event.signals ?? []),
+    transport?.sppl_names,
+    transport?.item_names,
+    ...(transport?.item_cds ?? []),
   ].join('|'))
 }
+
+const transportByKey = computed(
+  () => new Map(props.transports.map((t) => [t.transport_key, t])),
+)
 
 const filteredEvents = computed(() => {
   const query = normalized(searchText.value)
@@ -236,7 +245,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
           <input
             v-model="searchText"
             type="search"
-            placeholder="HBL · TR · 선박 · 항로 검색"
+            placeholder="HBL · TR · 선박 · 공급업체 · 품목 검색"
           />
         </label>
 
