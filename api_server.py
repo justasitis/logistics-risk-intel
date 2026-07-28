@@ -1048,6 +1048,56 @@ def delete_leadtime_overrides() -> dict[str, Any]:
 
  
 
+@app.post("/api/mi/registry/rebuild")
+def rebuild_mi_registry() -> dict[str, Any]:
+    """MI 이벤트 레지스트리 전체 재구축 (일자별 파일 재인입, 멱등)."""
+    try:
+        from backend.app.services import mi_event_registry
+
+        return mi_event_registry.rebuild_registry()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "레지스트리 재구축 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+@app.get("/api/mi/registry")
+def list_mi_registry(status: str | None = Query(default=None)) -> dict[str, Any]:
+    """MI 이벤트 레지스트리 조회 (ACTIVE>IMPROVING>RESOLVED, 최신 last_seen 순)."""
+    try:
+        from backend.app.services import mi_event_registry
+
+        return mi_event_registry.list_events(status=status)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "레지스트리 조회 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+@app.get("/api/mi/registry/{event_id}")
+def get_mi_registry_event(event_id: str) -> dict[str, Any]:
+    """MI 이벤트 레지스트리 단건 조회."""
+    from backend.app.services import mi_event_registry
+
+    event = mi_event_registry.get_event(event_id)
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"이벤트를 찾을 수 없습니다: {event_id}",
+        )
+    return event
+
+
+ 
+
 # 프런트엔드 정적 서빙 — frontend/dist가 있으면 / 에 마운트한다.
 
 # API 라우터는 위에서 먼저 등록되므로 /api/* 가 우선한다.

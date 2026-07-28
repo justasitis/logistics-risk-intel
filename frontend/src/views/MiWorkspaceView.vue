@@ -3,6 +3,7 @@ import ExternalMiUploadPanel from '../components/mi/ExternalMiUploadPanel.vue'
 import MiRefinementPanel from '../components/mi/MiRefinementPanel.vue'
 import MiReviewPanel from '../components/mi/MiReviewPanel.vue'
 import MiRunRecoveryPanel from '../components/mi/MiRunRecoveryPanel.vue'
+import MiEventRegistryPanel from '../components/mi/MiEventRegistryPanel.vue'
 </script>
 
 <template>
@@ -23,6 +24,8 @@ import MiRunRecoveryPanel from '../components/mi/MiRunRecoveryPanel.vue'
     </div>
 
     <MiReviewPanel />
+
+    <MiEventRegistryPanel />
   </main>
 </template>
 
