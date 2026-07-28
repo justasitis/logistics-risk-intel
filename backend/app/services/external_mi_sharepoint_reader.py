@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -15,6 +16,40 @@ from ..schemas.mi_ai import ExternalMiCandidateEnvelope
 FILE_NAME = "external_mi_candidates.json"
 PREFERRED_RELATIVE_PATH = Path("MI") / "current" / FILE_NAME
 MAX_FILE_SIZE_MB = 20
+
+# 일자별 파일명: external_mi_candidates_YYMMDD.json (최신 파일도 동일 형식)
+DATED_FILE_PATTERN = re.compile(
+    r"^external_mi_candidates_(\d{6})\.json$",
+    re.IGNORECASE,
+)
+
+
+def _dated_file_date(path: Path) -> date | None:
+    """파일명의 YYMMDD를 날짜로 파싱 (유효하지 않으면 None)."""
+    match = DATED_FILE_PATTERN.match(path.name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _latest_dated_file(directory: Path) -> Path | None:
+    """디렉터리에서 가장 최근 날짜의 일자별 후보 파일을 반환."""
+    if not directory.is_dir():
+        return None
+    dated: list[tuple[date, float, Path]] = []
+    for path in directory.iterdir():
+        if not path.is_file():
+            continue
+        file_date = _dated_file_date(path)
+        if file_date is not None:
+            dated.append((file_date, path.stat().st_mtime, path))
+    if not dated:
+        return None
+    dated.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return dated[0][2]
 
 
 def _iso_from_timestamp(timestamp: float) -> str:
@@ -62,6 +97,11 @@ def find_external_mi_candidates_file(root: Path) -> Path | None:
     if preferred.is_file():
         return preferred
 
+    # 일자별 파일(external_mi_candidates_YYMMDD.json)이 있으면 가장 최근 것
+    dated = _latest_dated_file(root / "MI" / "current")
+    if dated is not None:
+        return dated
+
     direct = root / FILE_NAME
     if direct.is_file():
         return direct
@@ -70,6 +110,11 @@ def find_external_mi_candidates_file(root: Path) -> Path | None:
         path
         for path in root.rglob(FILE_NAME)
         if path.is_file()
+    ]
+    candidates += [
+        path
+        for path in root.rglob("external_mi_candidates_*.json")
+        if path.is_file() and _dated_file_date(path) is not None
     ]
 
     if not candidates:

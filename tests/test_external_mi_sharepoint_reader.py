@@ -164,3 +164,47 @@ class TestReadCandidates:
         )
         result = read_external_mi_candidates(tmp_path)
         assert "기존 경고" in result["warnings"]
+
+
+class TestDatedCandidateFiles:
+    """일자별 파일(external_mi_candidates_YYMMDD.json) 탐색."""
+
+    def test_dated_file_found_in_current_dir(self, tmp_path):
+        current = tmp_path / "MI" / "current"
+        current.mkdir(parents=True)
+        _write(current / "external_mi_candidates_260713.json", _envelope())
+        assert find_external_mi_candidates_file(tmp_path) == (
+            current / "external_mi_candidates_260713.json"
+        )
+
+    def test_latest_dated_wins(self, tmp_path):
+        current = tmp_path / "MI" / "current"
+        current.mkdir(parents=True)
+        _write(current / "external_mi_candidates_260713.json", _envelope())
+        _write(current / "external_mi_candidates_260721.json", _envelope())
+        assert find_external_mi_candidates_file(tmp_path) == (
+            current / "external_mi_candidates_260721.json"
+        )
+
+    def test_plain_preferred_beats_dated(self, tmp_path):
+        current = tmp_path / "MI" / "current"
+        current.mkdir(parents=True)
+        _write(current / "external_mi_candidates.json", _envelope())
+        _write(current / "external_mi_candidates_260721.json", _envelope())
+        assert find_external_mi_candidates_file(tmp_path) == (
+            current / "external_mi_candidates.json"
+        )
+
+    def test_invalid_date_name_ignored(self, tmp_path):
+        current = tmp_path / "MI" / "current"
+        current.mkdir(parents=True)
+        _write(current / "external_mi_candidates_991399.json", _envelope())
+        assert find_external_mi_candidates_file(tmp_path) is None
+
+    def test_dated_found_via_rglob_fallback(self, tmp_path):
+        nested = tmp_path / "MI" / "current" / "nested"
+        nested.mkdir(parents=True)
+        _write(nested / "external_mi_candidates_260720.json", _envelope())
+        assert find_external_mi_candidates_file(tmp_path) == (
+            nested / "external_mi_candidates_260720.json"
+        )
