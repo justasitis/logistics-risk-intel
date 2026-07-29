@@ -204,6 +204,7 @@ def fetch_bl_info(
     etd_from: Optional[date] = None,
     companies: Optional[Sequence[str]] = None,
     plants: Optional[Sequence[str]] = None,
+    hbl_nos: Optional[Sequence[str]] = None,
     max_rows: int = 20_000,
     username: Optional[str] = None,
     password: Optional[str] = None,
@@ -219,6 +220,9 @@ def fetch_bl_info(
         filters.append(f"({expr})")
     if plants:
         expr = " or ".join(f"plnt_cd = '{_escape_literal(v)}'" for v in plants)
+        filters.append(f"({expr})")
+    if hbl_nos:
+        expr = " or ".join(f"hbl_no = '{_escape_literal(v)}'" for v in hbl_nos)
         filters.append(f"({expr})")
 
     df = _fetch_view(

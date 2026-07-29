@@ -322,6 +322,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
             <h2>{{ selectedDisplayId }}</h2>
             <WatchToggle
               v-if="selectedTransport.hbl_no"
+              :key="selectedTransport.transport_key"
               :hbl-no="selectedTransport.hbl_no"
               :label="selectedDisplayId"
             />

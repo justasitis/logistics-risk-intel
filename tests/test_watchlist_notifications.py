@@ -65,36 +65,37 @@ def test_api_watchlist_crud(watch_dir, monkeypatch):
     assert client.delete("/api/watchlist/HBL-9").status_code == 404
 
 
-FAKE_OVERVIEW = {
-    "cache_hit": False,
-    "transports": [
-        {
-            "hbl_no": "HBL-1",
-            "delivery_req_breach_days": 9,
-            "anomaly_signals": ["REPEATED_ETA_DELAY"],
-            "severity": "CRITICAL",
-        },
-        {
-            "hbl_no": "HBL-2",
-            "delivery_req_breach_days": 0,
-            "anomaly_signals": [],
-            "severity": "NORMAL",
-        },
-    ],
+FAKE_ROW = {
+    "hbl_no": "HBL-1",
+    "delivery_req_breach_days": 9,
+    "anomaly_signals": ["REPEATED_ETA_DELAY"],
+    "severity": "CRITICAL",
 }
 
 
-def test_notifications_feed(watch_dir, monkeypatch):
+def test_notifications_feed_direct_query(watch_dir, monkeypatch):
     monkeypatch.setenv("USERNAME", "alice")
     watchlist_store.add("HBL-1", username="alice")  # breach + signal
     watchlist_store.add("HBL-2", username="alice")  # 정상
     watchlist_store.add("HBL-9", username="alice")  # 미존재
-    monkeypatch.setattr(api_server, "schedule_overview", lambda **kw: FAKE_OVERVIEW)
+    # overview 캐시 없음 + 직접 조회 경로만 사용
+    monkeypatch.setattr(api_server, "_cached_overview_transports", lambda: {})
+    called = {}
+
+    def _fake_enriched(hbl_nos):
+        called["hbl_nos"] = hbl_nos
+        return {"HBL-1": FAKE_ROW, "HBL-2": {**FAKE_ROW, "hbl_no": "HBL-2",
+                                             "delivery_req_breach_days": 0,
+                                             "anomaly_signals": [],
+                                             "severity": "NORMAL"}}
+
+    monkeypatch.setattr(api_server, "_enriched_transports_by_hbl", _fake_enriched)
 
     client = TestClient(app)
     resp = client.get("/api/notifications")
     assert resp.status_code == 200
     body = resp.json()
+    assert called["hbl_nos"] == ["HBL-1", "HBL-2", "HBL-9"]
     items = {i["hbl_no"]: i for i in body["items"]}
 
     hbl1 = items["HBL-1"]["alerts"]
@@ -110,13 +111,33 @@ def test_notifications_feed(watch_dir, monkeypatch):
     assert not_found["severity"] == "LOW"
 
 
+def test_notifications_uses_overview_cache_when_present(watch_dir, monkeypatch):
+    monkeypatch.setenv("USERNAME", "alice")
+    watchlist_store.add("HBL-1", username="alice")
+    monkeypatch.setattr(
+        api_server, "_cached_overview_transports", lambda: {"HBL-1": FAKE_ROW}
+    )
+
+    def _boom(hbl_nos):
+        raise AssertionError("캐시 히트 시 직접 조회를 호출하면 안 됨")
+
+    monkeypatch.setattr(api_server, "_enriched_transports_by_hbl", _boom)
+    client = TestClient(app)
+    body = client.get("/api/notifications").json()
+    assert body["cache_hit"] is True
+    assert {a["type"] for a in body["items"][0]["alerts"]} == {
+        "DELIVERY_REQ_BREACH",
+        "SIGNAL",
+    }
+
+
 def test_notifications_empty_watchlist(watch_dir, monkeypatch):
     monkeypatch.setenv("USERNAME", "alice")
-    # overview가 호출되면 안 됨
-    def _boom(**kw):
-        raise AssertionError("overview should not be called")
 
-    monkeypatch.setattr(api_server, "schedule_overview", _boom)
+    def _boom(hbl_nos):
+        raise AssertionError("watchlist가 비면 조회하지 않아야 함")
+
+    monkeypatch.setattr(api_server, "_enriched_transports_by_hbl", _boom)
     client = TestClient(app)
     body = client.get("/api/notifications").json()
     assert body["items"] == []

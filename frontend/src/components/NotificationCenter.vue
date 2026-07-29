@@ -9,6 +9,7 @@ const LAST_SEEN_KEY = 'lri-notifications-last-seen'
 
 const data = ref<NotificationsResponse | null>(null)
 const open = ref(false)
+const loading = ref(false)
 const error = ref('')
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -24,11 +25,16 @@ const hasNew = computed(() => {
 })
 
 async function refresh() {
+  loading.value = true
+  error.value = ''
   try {
     data.value = await getNotifications()
-    error.value = ''
   } catch (e) {
+    // 에러 시 이전 데이터로 빈 상태를 렌더하지 않고 에러를 표시
+    data.value = null
     error.value = e instanceof Error ? e.message : '알림 조회 실패'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -66,12 +72,14 @@ onBeforeUnmount(() => {
         <span class="drop-title">관심화물 알림</span>
         <span v-if="data" class="meta">{{ data.computed_at.slice(0, 16).replace('T', ' ') }} 기준</span>
       </div>
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="data && !data.items.length" class="hint">
+      <p v-if="loading" class="hint">알림을 확인하는 중...</p>
+      <p v-else-if="error" class="error">알림 조회 실패: {{ error }}</p>
+      <p v-else-if="data && !data.items.length" class="hint">
         관심화물이 없습니다. 운송 상세에서 ☆ 관심을 등록하세요.
       </p>
 
-      <div v-for="item in data?.items ?? []" :key="item.hbl_no" class="item">
+      <template v-if="!loading && !error && data">
+        <div v-for="item in data.items" :key="item.hbl_no" class="item">
         <div class="item-head">
           <button type="button" class="hbl-link" @click="emit('selectHbl', item.hbl_no)">
             {{ item.label || item.hbl_no }}
@@ -89,7 +97,8 @@ onBeforeUnmount(() => {
           </li>
         </ul>
         <p v-else class="ok">이상 없음</p>
-      </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>

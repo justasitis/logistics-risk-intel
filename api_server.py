@@ -1149,10 +1149,92 @@ def _norm_hbl(value: Any) -> str:
     return str(value or "").replace(" ", "").upper()
 
 
+def _cached_overview_transports() -> dict[str, dict[str, Any]]:
+    """이미 계산된 overview 캐시가 있으면 HBL 인덱스로 재사용 (없으면 빈 dict)."""
+    for _key, (_cached_at, payload) in _CACHE.items():
+        if isinstance(payload, dict) and isinstance(payload.get("transports"), list):
+            return {
+                _norm_hbl(row.get("hbl_no")): row
+                for row in payload["transports"]
+                if _norm_hbl(row.get("hbl_no"))
+            }
+    return {}
+
+
+def _transport_alerts_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
+    """enriched transport 1행 → 알림 배열 (v1 타입)."""
+    alerts: list[dict[str, Any]] = []
+    breach = int(row.get("delivery_req_breach_days") or 0)
+    if breach > 0:
+        alerts.append(
+            {
+                "type": "DELIVERY_REQ_BREACH",
+                "severity": "HIGH" if breach >= 7 else "MEDIUM",
+                "message": f"납기 초과 +{breach}일",
+                "value": breach,
+            }
+        )
+    signals = row.get("anomaly_signals") or []
+    if signals:
+        labels = [SIGNAL_LABELS.get(s, str(s)) for s in signals]
+        alerts.append(
+            {
+                "type": "SIGNAL",
+                "severity": str(row.get("severity") or "MEDIUM"),
+                "message": "이상 신호: " + ", ".join(labels),
+                "value": len(signals),
+            }
+        )
+    return alerts
+
+
+def _enriched_transports_by_hbl(hbl_nos: list[str]) -> dict[str, dict[str, Any]]:
+    """watch된 HBL만 직접 조회해 enriched transport 반환.
+
+    전체 overview 계산(Denodo 전체 조회+이력 chunk)과 달리
+    HBL 건당 소형 쿼리 2종(info/history)만 사용해 캐시 무관하게 가볍다.
+    """
+    from services.anomaly_engine import evaluate_schedule_anomalies
+    from services.datalake_schedule_client import (
+        fetch_bl_history_for_transports,
+        fetch_bl_info,
+    )
+    from services.schedule_history_service import (
+        build_schedule_metrics,
+        build_transport_snapshot,
+    )
+
+    info_df = fetch_bl_info(hbl_nos=hbl_nos)
+    snapshot_df = build_transport_snapshot(info_df, active_only=True)
+    if snapshot_df.empty:
+        return {}
+
+    transport_keys = [
+        (
+            str(row.get("cmpy_cd") or ""),
+            str(row.get("plnt_cd") or ""),
+            str(row.get("trpr_no") or ""),
+        )
+        for row in snapshot_df.to_dict(orient="records")
+    ]
+    history_df = fetch_bl_history_for_transports(transport_keys)
+    metrics_df = build_schedule_metrics(snapshot_df, history_df)
+    enriched_df, _events = evaluate_schedule_anomalies(metrics_df)
+
+    result: dict[str, dict[str, Any]] = {}
+    for row in enriched_df.to_dict(orient="records"):
+        key = _norm_hbl(row.get("hbl_no"))
+        if key and key not in result:
+            result[key] = row
+    return result
+
+
 @app.get("/api/notifications")
 def get_notifications() -> dict[str, Any]:
     """관심화물 알림 feed — 판단은 백엔드 단일 주체.
 
+    조회 경로: overview 캐시에 이미 있으면 재사용, 없는 HBL은
+    fetch_bl_info(hbl_nos=...) 직접 조회 (전체 overview 계산하지 않음).
     v1 알림 타입: DELIVERY_REQ_BREACH / SIGNAL / NOT_FOUND.
     (확장 여지: shortage 등 Item 기준정보 연동 알람)
     """
@@ -1164,25 +1246,23 @@ def get_notifications() -> dict[str, Any]:
         return {"computed_at": datetime.now().isoformat(timespec="seconds"),
                 "cache_hit": False, "items": []}
 
-    # overview 파이프라인/캐시 재사용 (기본 파라미터 = 전체 법인)
-    # Query 기본값 객체가 아닌 실제 기본값을 명시 전달해야 한다.
-    overview = schedule_overview(
-        company=[],
-        etd_days=365,
-        history_days=180,
-        recent_window_days=14,
-        max_info_rows=20_000,
-        max_events=200,
-        max_map_routes=300,
-        refresh=False,
-    )
-
-    transports = overview.get("transports", [])
-    by_hbl = {
-        _norm_hbl(row.get("hbl_no")): row
-        for row in transports
-        if _norm_hbl(row.get("hbl_no"))
-    }
+    try:
+        cached = _cached_overview_transports()
+        hbl_nos = [str(i["id"]) for i in items if i.get("type") == "hbl"]
+        missing = [h for h in hbl_nos if _norm_hbl(h) not in cached]
+        fully_cached = not missing
+        direct = _enriched_transports_by_hbl(missing) if missing else {}
+        by_hbl = {**direct, **cached}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "알림 feed 처리 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
 
     result_items: list[dict[str, Any]] = []
     for item in items:
@@ -1190,46 +1270,24 @@ def get_notifications() -> dict[str, Any]:
             continue
         hbl_no = item["id"]
         row = by_hbl.get(_norm_hbl(hbl_no))
-        alerts: list[dict[str, Any]] = []
-
         if row is None:
-            alerts.append(
+            alerts = [
                 {
                     "type": "NOT_FOUND",
                     "severity": "LOW",
                     "message": "활성 운송에서 찾을 수 없습니다 (완료 또는 미존재 가능)",
                     "value": None,
                 }
-            )
+            ]
         else:
-            breach = int(row.get("delivery_req_breach_days") or 0)
-            if breach > 0:
-                alerts.append(
-                    {
-                        "type": "DELIVERY_REQ_BREACH",
-                        "severity": "HIGH" if breach >= 7 else "MEDIUM",
-                        "message": f"납기 초과 +{breach}일",
-                        "value": breach,
-                    }
-                )
-            signals = row.get("anomaly_signals") or []
-            if signals:
-                labels = [SIGNAL_LABELS.get(s, str(s)) for s in signals]
-                alerts.append(
-                    {
-                        "type": "SIGNAL",
-                        "severity": str(row.get("severity") or "MEDIUM"),
-                        "message": "이상 신호: " + ", ".join(labels),
-                        "value": len(signals),
-                    }
-                )
+            alerts = _transport_alerts_from_row(row)
         result_items.append(
             {"hbl_no": hbl_no, "label": item.get("label", ""), "alerts": alerts}
         )
 
     return {
         "computed_at": datetime.now().isoformat(timespec="seconds"),
-        "cache_hit": bool(overview.get("cache_hit")),
+        "cache_hit": fully_cached,
         "items": result_items,
     }
 

@@ -20,6 +20,7 @@ import requests
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
 DEFAULT_POLL_SECONDS = 600
+DEFAULT_FETCH_TIMEOUT = 60.0
 
 
 def server_url() -> str:
@@ -33,6 +34,14 @@ def poll_seconds() -> int:
         return DEFAULT_POLL_SECONDS
 
 
+def fetch_timeout() -> float:
+    """feed 조회 타임아웃 (초) — 기본 60초, TRAY_FETCH_TIMEOUT으로 조정."""
+    try:
+        return float(os.environ.get("TRAY_FETCH_TIMEOUT", "").strip() or DEFAULT_FETCH_TIMEOUT)
+    except ValueError:
+        return DEFAULT_FETCH_TIMEOUT
+
+
 def state_file_path() -> Path:
     """상태 파일: frozen이면 exe 옆, 아니면 tray/ 폴터."""
     if getattr(sys, "frozen", False):
@@ -42,25 +51,55 @@ def state_file_path() -> Path:
 
 # ---------- feed 조회 ----------
 
+class FetchResult:
+    """feed 조회 결과. kind: ok | timeout | connection | http | bad_response."""
+
+    def __init__(
+        self,
+        kind: str,
+        items: list[dict[str, Any]] | None = None,
+        computed_at: str = "",
+        detail: str = "",
+    ) -> None:
+        self.kind = kind
+        self.items = items or []
+        self.computed_at = computed_at
+        self.detail = detail
+
+    @property
+    def ok(self) -> bool:
+        return self.kind == "ok"
+
+
 def fetch_alerts(
     base_url: str,
-    timeout: float = 10.0,
-) -> tuple[str, list[dict[str, Any]]] | None:
-    """GET /api/notifications → (computed_at, items). 실패 시 None (백엔드 다운 허용)."""
+    timeout: float | None = None,
+) -> FetchResult:
+    """GET /api/notifications. 실패 종류(시간 초과/연결/HTTP/형식)를 구분해 반환."""
+    timeout = timeout if timeout is not None else fetch_timeout()
     try:
         response = requests.get(
             f"{base_url.rstrip('/')}/api/notifications",
             timeout=timeout,
         )
-        if response.status_code != 200:
-            return None
+    except requests.Timeout:
+        return FetchResult("timeout", detail=f"{timeout}s 초과")
+    except requests.ConnectionError as exc:
+        return FetchResult("connection", detail=str(exc)[:200])
+    except requests.RequestException as exc:
+        return FetchResult("connection", detail=str(exc)[:200])
+    if response.status_code != 200:
+        return FetchResult("http", detail=f"HTTP {response.status_code}")
+    try:
         data = response.json()
-        items = data.get("items")
-        if not isinstance(items, list):
-            return None
-        return str(data.get("computed_at") or ""), items
-    except (requests.RequestException, ValueError):
-        return None
+    except ValueError:
+        return FetchResult("bad_response", detail="JSON 파싱 실패")
+    items = data.get("items")
+    if not isinstance(items, list):
+        return FetchResult("bad_response", detail="items 형식 오류")
+    return FetchResult(
+        "ok", items=items, computed_at=str(data.get("computed_at") or "")
+    )
 
 
 # ---------- 서명/diff ----------

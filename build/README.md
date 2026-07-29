@@ -79,3 +79,13 @@ dist-package/
 | `build/logistics_risk.spec` | PyInstaller 스펙 (onedir, 데이터 수집) |
 | `build/Build-Package.ps1` | VDI 빌드 파이프라인 (PS 5.1, UTF-8 BOM/CRLF) |
 | `api_server.py` (수정) | frontend/dist 정적 서빙 마운트 |
+
+## 트레이 알림박스 (LogisticsRiskTray)
+
+- 패키지에 `LogisticsRiskTray/LogisticsRiskTray.exe`가 포함됩니다.
+- **트레이는 백엔드(uvicorn 또는 LogisticsRisk.exe)가 실행 중일 때만 동작합니다.**
+  백엔드가 꺼져 있으면 아이콘 제목에 실패 종류(시간 초과/연결 실패/서버 오류)가 표시되고 조용히 재시도합니다.
+- 환경변수: `TRAY_SERVER_URL`(기본 http://127.0.0.1:8000),
+  `TRAY_POLL_SECONDS`(기본 600), `TRAY_FETCH_TIMEOUT`(기본 60초).
+- 시작 프로그램 등록은 트레이 메뉴 → "시작 프로그램 등록/해제"
+  (HKCU Run 키, 관리자 권한 불필요).

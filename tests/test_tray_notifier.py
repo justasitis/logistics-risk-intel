@@ -35,22 +35,40 @@ def test_fetch_alerts_ok(monkeypatch):
         lambda url, timeout: _FakeResponse(200, _feed([_item("H1", [_alert()])])),
     )
     result = core.fetch_alerts("http://x")
-    assert result is not None
-    computed_at, items = result
-    assert computed_at == "2026-07-19T09:00:00"
-    assert items[0]["hbl_no"] == "H1"
+    assert result.ok and result.kind == "ok"
+    assert result.computed_at == "2026-07-19T09:00:00"
+    assert result.items[0]["hbl_no"] == "H1"
 
 
-def test_fetch_alerts_backend_down(monkeypatch):
+def test_fetch_alerts_error_kinds(monkeypatch):
     import requests as real_requests
 
-    def _boom(url, timeout):
+    def _timeout(url, timeout):
+        raise real_requests.Timeout("slow")
+
+    def _conn(url, timeout):
         raise real_requests.ConnectionError("down")
 
-    monkeypatch.setattr(core.requests, "get", _boom)
-    assert core.fetch_alerts("http://x") is None
+    monkeypatch.setattr(core.requests, "get", _timeout)
+    assert core.fetch_alerts("http://x").kind == "timeout"
+
+    monkeypatch.setattr(core.requests, "get", _conn)
+    assert core.fetch_alerts("http://x").kind == "connection"
+
     monkeypatch.setattr(core.requests, "get", lambda url, timeout: _FakeResponse(502))
-    assert core.fetch_alerts("http://x") is None
+    result = core.fetch_alerts("http://x")
+    assert result.kind == "http" and "502" in result.detail
+
+    monkeypatch.setattr(
+        core.requests, "get", lambda url, timeout: _FakeResponse(200, {"bad": 1})
+    )
+    assert core.fetch_alerts("http://x").kind == "bad_response"
+
+
+def test_fetch_timeout_default_and_env(monkeypatch):
+    assert core.fetch_timeout() == 60.0
+    monkeypatch.setenv("TRAY_FETCH_TIMEOUT", "15")
+    assert core.fetch_timeout() == 15.0
 
 
 # ---------- 서명 ----------

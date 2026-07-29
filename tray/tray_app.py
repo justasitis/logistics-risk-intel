@@ -3,7 +3,7 @@
 얇은 껍데기: feed 폼링/토스트/트레이 아이콘만 담당, 판단 로직은 없다.
 - 폼링 주기: TRAY_POLL_SECONDS (기본 600초)
 - 서버: TRAY_SERVER_URL (기본 http://127.0.0.1:8000)
-- 백엔드 다운 시: 아이콘 제목에 "연결 실패" 표시 후 조용히 재시도
+- 백엔드 다운 시: 실패 종류(시간 초과/연결/HTTP/형식)를 아이콘 제목에 표시 후 조용히 재시도
 """
 from __future__ import annotations
 
@@ -104,22 +104,29 @@ class TrayNotifier:
     def __init__(self) -> None:
         self.alert_count = 0
         self.failed = False
+        self.fail_kind = ""
         self._stop = threading.Event()
 
     def poll_once(self) -> None:
         """feed 1회 폼링 → 새 알림 토스트 → 아이콘 갱신."""
         result = notifier_core.fetch_alerts(notifier_core.server_url())
-        if result is None:
+        if not result.ok:
             self.failed = True
+            self.fail_kind = result.kind
             self.alert_count = 0
-            logger.warning("백엔드 연결 실패 — 다음 주기에 재시도")
+            logger.warning(
+                "백엔드 조회 실패(%s: %s) — 다음 주기에 재시도",
+                result.kind,
+                result.detail,
+            )
             return
 
         self.failed = False
-        computed_at, items = result
+        self.fail_kind = ""
+        items = result.items
         state_path = notifier_core.state_file_path()
         state = notifier_core.load_state(state_path)
-        new_alerts, new_state = notifier_core.diff_new(state, items, computed_at)
+        new_alerts, new_state = notifier_core.diff_new(state, items, result.computed_at)
         notifier_core.save_state(state_path, new_state)
 
         self.alert_count = sum(
@@ -146,7 +153,14 @@ class TrayNotifier:
     def _refresh_icon(self, icon) -> None:
         icon.icon = _create_image(self.alert_count, self.failed)
         if self.failed:
-            icon.title = "LogisticsRisk 트레이 — 백엔드 연결 실패"
+            kind_labels = {
+                "timeout": "시간 초과",
+                "connection": "연결 실패",
+                "http": "서버 오류",
+                "bad_response": "응답 형식 오류",
+            }
+            label = kind_labels.get(self.fail_kind, "조회 실패")
+            icon.title = f"LogisticsRisk 트레이 — 백엔드 {label}"
         else:
             icon.title = f"LogisticsRisk 트레이 — 알림 {self.alert_count}건"
 
