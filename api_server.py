@@ -879,6 +879,197 @@ def leadtime_report(
 
  
 
+ROUTE_MASTER_ALLOWED_DIMS = {
+    "cmpy_nm",
+    "plnt_nm",
+    "lsp_nm",
+    "bsns_ccd_nm",
+    "trpr_mode",
+}
+ROUTE_MASTER_REQUIRED_COLUMNS = [
+    "dprt", "dprt_nm", "arvl", "arvl_nm", "to_stlc_cd", "to_stlc_nm",
+]
+ROUTE_MASTER_MAX_ROWS = 500
+# trpr_mode 코드 라벨 — 컬럼 딕셔너리에 코드 예시(100/300)만 있어 추정 매핑.
+TRPR_MODE_LABELS = {
+    "100": "해상",
+    "200": "육상",
+    "300": "항공",
+}
+
+
+@app.get("/api/routes/master")
+def route_master(
+    companies: list[str] = Query(default=[]),
+    dims: list[str] = Query(default=[]),
+    etd_days: int = Query(default=365, ge=30, le=1_500),
+) -> dict[str, Any]:
+    """PORT TO PORT + 최종 도착지 조합 마스터 (구분자 선택 그룹화)."""
+    selected_dims = list(dict.fromkeys(dims))
+    invalid_dims = [
+        dim for dim in selected_dims
+        if dim not in ROUTE_MASTER_ALLOWED_DIMS
+    ]
+    if invalid_dims:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"허용되지 않은 dims: {invalid_dims} "
+                f"(허용: {sorted(ROUTE_MASTER_ALLOWED_DIMS)})"
+            ),
+        )
+
+    try:
+        info_df = fetch_bl_info(
+            etd_from=date.today() - timedelta(days=etd_days),
+            companies=companies or None,
+            max_rows=50_000,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    group_columns = selected_dims + ROUTE_MASTER_REQUIRED_COLUMNS
+    work = info_df.copy()
+    for column in ["trpr_no", *group_columns]:
+        if column not in work.columns:
+            work[column] = ""
+        work[column] = work[column].fillna("").astype(str).str.strip()
+
+    # shipment_count는 PO 라인이 아니라 운송번호(trpr_no) 유니크 기준.
+    grouped = (
+        work.groupby(group_columns, dropna=False)["trpr_no"]
+        .nunique()
+        .reset_index(name="shipment_count")
+        .sort_values(
+            ["shipment_count", *group_columns],
+            ascending=[False, *([True] * len(group_columns))],
+        )
+    )
+    total_rows = int(len(grouped))
+    truncated = total_rows > ROUTE_MASTER_MAX_ROWS
+    records = grouped.head(ROUTE_MASTER_MAX_ROWS).to_dict("records")
+
+    if "trpr_mode" in selected_dims:
+        for record in records:
+            mode_code = str(record.get("trpr_mode") or "")
+            record["trpr_mode_label"] = TRPR_MODE_LABELS.get(
+                mode_code, mode_code,
+            )
+
+    return _clean_value({
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "total_rows": total_rows,
+        "truncated": truncated,
+        "rows": records,
+    })
+
+
+ 
+
+FREIGHT_SERIES_LABELS = {
+    "scfi": "SCFI",
+    "kcci": "KCCI 종합",
+    "kcci_usec": "KCCI 북미 동안 (USD/40')",
+    "kcci_med": "KCCI 지중해 (USD/40')",
+}
+FREIGHT_INDICES_RELATIVE_PATH = (
+    _Path("MI") / "freight_indices" / "freight_indices.json"
+)
+
+
+def _freight_indices_path() -> _Path | None:
+    from backend.app.core.marinesia_settings import (
+        get_marinesia_settings,
+    )
+
+    sharepoint_file = (
+        get_marinesia_settings().sharepoint_root
+        / FREIGHT_INDICES_RELATIVE_PATH
+    )
+    if sharepoint_file.is_file():
+        return sharepoint_file
+
+    fallback = (
+        _Path(__file__).resolve().parent
+        / "backend" / "data" / "freight_indices.json"
+    )
+    return fallback if fallback.is_file() else None
+
+
+@app.get("/api/report/freight-indices")
+def freight_indices() -> dict[str, Any]:
+    """운임지수 시계열 (SharePoint 동기화 폴터, 없으면 backend/data 폴�)."""
+    path = _freight_indices_path()
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "freight_indices.json을 찾지 못했습니다. "
+                "SharePoint MI\\freight_indices 또는 backend/data를 "
+                "확인하세요."
+            ),
+        )
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"운임지수 파일을 읽지 못했습니다: {exc}",
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=502,
+            detail="운임지수 파일의 최상위 구조가 객체가 아닙니다.",
+        )
+
+    series: list[dict[str, Any]] = []
+    for key, label in FREIGHT_SERIES_LABELS.items():
+        raw_points = payload.get(key)
+        if raw_points is None:
+            continue
+        if not isinstance(raw_points, list):
+            raise HTTPException(
+                status_code=502,
+                detail=f"운임지수 시리즈 {key}가 배열이 아닙니다.",
+            )
+        points: list[dict[str, Any]] = []
+        for item in raw_points:
+            if (
+                not isinstance(item, dict)
+                or "date" not in item
+                or "value" not in item
+            ):
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"운임지수 시리즈 {key}에 "
+                        "date/value가 없는 항목이 있습니다."
+                    ),
+                )
+            try:
+                value = float(item["value"])
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"운임지수 시리즈 {key}의 value가 "
+                        f"숫자가 아닙니다: {item['value']!r}"
+                    ),
+                ) from exc
+            points.append({"date": str(item["date"]), "value": value})
+        series.append({"key": key, "label": label, "points": points})
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source_file": str(path),
+        "series": series,
+    }
+
+
+ 
+
 class InsightDraftBody(BaseModel):
     month: str | None = None
     include_leadtime: bool = True

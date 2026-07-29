@@ -47,6 +47,7 @@ MONTH_LABELS = [
 DEFINITIONS = {
     "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T (본 집계는 해상 L/T만)",
     "scope": "집계 대상: cargo_type3 == 'FCL' (컨테이너 전적) 운송만",
+    "fixed_rows": "'고정값' 표시 행은 실데이터 집계가 아닌 사용자 제공 고정값 (훼리 등 spot성 구간)",
     "actual_lt": "실적 해상 L/T = ata - onboard_date (onboard_date 없으면 atd), 일 단위",
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
     "month_basis": "월 그룹핑 = onboard_date 월 (없으면 atd 월)",
@@ -80,9 +81,25 @@ def _country_of(dprt: str) -> str | None:
     return None
 
 
+def _code_match(code: str, patterns: list[str]) -> bool:
+    """코드 매칭 — 패턴 끝의 '*'는 접두 와일드카드 (예: 'KR*')."""
+    code = code.strip().upper()
+    for pattern in patterns:
+        p = str(pattern).strip().upper()
+        if p.endswith("*"):
+            if code.startswith(p[:-1]):
+                return True
+        elif code == p:
+            return True
+    return False
+
+
 def _matches_group(row: dict[str, Any], group: dict[str, Any]) -> bool:
-    arvl = str(row.get("arvl") or "").strip().upper()
-    if arvl not in {c.upper() for c in group.get("arvl_codes", [])}:
+    arvl = str(row.get("arvl") or "")
+    if not _code_match(arvl, group.get("arvl_codes", [])):
+        return False
+    dprt_codes = group.get("dprt_codes", [])
+    if dprt_codes and not _code_match(str(row.get("dprt") or ""), dprt_codes):
         return False
     tokens = [t.upper() for t in group.get("stopby_match", [])]
     if not tokens:
@@ -179,29 +196,13 @@ def compute_leadtime_report(
                 out[month] = round(max(values), 1)
         return out
 
-    used_months: dict[str, str] = {}  # key -> kind
-    group_payloads = []
-    for group in groups:
-        rows = []
-        for country in COUNTRY_ORDER:
-            for stat in STAT_ORDER:
-                cells = _cells(buckets, group["group_id"], country, stat)
-                fcells = _cells(forecast_buckets, group["group_id"], country, stat)
-                for key in cells:
-                    used_months.setdefault(key, "actual")
-                for key in fcells:
-                    used_months[key] = "forecast"
-                rows.append(
-                    {
-                        "country": country,
-                        "country_label": COUNTRY_LABELS[country],
-                        "stat": stat,
-                        "cells": {**cells, **fcells},
-                    }
-                )
-        group_payloads.append(
-            {"group_id": group["group_id"], "name": group["name"], "rows": rows}
-        )
+    # 월 열 확정 (실적/예상 데이터가 있는 월만)
+    used_months: dict[str, str] = {}
+    for source, kind in ((buckets, "actual"), (forecast_buckets, "forecast")):
+        for countries in source.values():
+            for months_map in countries.values():
+                for key in months_map:
+                    used_months[key] = kind
 
     def _sort_key(key: str) -> tuple[int, int]:
         year, month = key.split("-")
@@ -215,6 +216,43 @@ def compute_leadtime_report(
         }
         for key in sorted(used_months, key=_sort_key)
     ]
+
+    group_payloads = []
+    for group in groups:
+        rows = []
+        for country in COUNTRY_ORDER:
+            for stat in STAT_ORDER:
+                cells = _cells(buckets, group["group_id"], country, stat)
+                fcells = _cells(forecast_buckets, group["group_id"], country, stat)
+                rows.append(
+                    {
+                        "country": country,
+                        "country_label": COUNTRY_LABELS[country],
+                        "stat": stat,
+                        "cells": {**cells, **fcells},
+                    }
+                )
+        # 고정 행 주입 (사용자 제공 고정값 — 실데이터 집계 없이 모든 월 열 동일 값)
+        for fixed in group.get("fixed_rows", []):
+            values = fixed.get("values", {})
+            for stat in STAT_ORDER:
+                rows.append(
+                    {
+                        "country": fixed.get("country", "FIXED"),
+                        "country_label": fixed.get("country_label", "고정값"),
+                        "stat": stat,
+                        "cells": {
+                            col["key"]: values.get(stat)
+                            for col in month_columns
+                            if values.get(stat) is not None
+                        },
+                        "fixed": True,
+                        "fixed_note": fixed.get("note", ""),
+                    }
+                )
+        group_payloads.append(
+            {"group_id": group["group_id"], "name": group["name"], "rows": rows}
+        )
 
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),

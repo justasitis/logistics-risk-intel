@@ -20,6 +20,25 @@
       "arvl_codes": ["USNYC", "USSAV", "USCHS", "USBAL", "USNFK", "USBOS"],
       "stopby_match": [],
       "stopby_exclude": []
+    },
+    {
+      "group_id": "CHINA_TO_KOREA",
+      "name": "중국 항만 선적 / 한국 항만 도착",
+      "arvl_codes": ["KR*"],
+      "dprt_codes": [
+        "CNTSN", "CNTAO", "CNDLC", "CNZJG", "CNLYG", "CNDAF",
+        "CNSHA", "CNNGB", "CNSZX", "CNSHK"
+      ],
+      "stopby_match": [],
+      "stopby_exclude": [],
+      "fixed_rows": [
+        {
+          "country": "FERRY_NORTH_CN",
+          "country_label": "북중국(훼리)",
+          "values": {"Avg": 1, "Min": 1, "Max": 1},
+          "note": "훼리는 spot성이라 실데이터 집계 불가 — 사용자 제공 고정값"
+        }
+      ]
     }
   ]
 }

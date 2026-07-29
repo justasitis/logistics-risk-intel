@@ -42,6 +42,8 @@ import LeadtimeReportPanel from '@/components/LeadtimeReportPanel.vue'
 
 import NotificationCenter from '@/components/NotificationCenter.vue'
 
+import RouteMasterPanel from '@/components/RouteMasterPanel.vue'
+
 
  
 
@@ -231,7 +233,7 @@ type WorkspaceMode = 'dashboard' | 'mi' | 'vessel'
 
 const activeWorkspace = ref<
 
-  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report'
+  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'routes'
 
 >('dashboard')
 
@@ -2494,6 +2496,25 @@ onBeforeUnmount(() => {
 
  
 
+          <button
+
+            type="button"
+
+            class="workspace-tab"
+
+            :class="{ active: activeWorkspace === 'routes' }"
+
+            @click="activeWorkspace = 'routes'"
+
+          >
+
+            경로 조회
+
+          </button>
+
+
+ 
+
         </nav>
 
 
@@ -2962,13 +2983,27 @@ onBeforeUnmount(() => {
 
     <section
 
-      v-else
+      v-else-if="activeWorkspace === 'report'"
 
       class="mi-workspace-host"
 
     >
 
       <LeadtimeReportPanel />
+
+    </section>
+
+
+
+    <section
+
+      v-else
+
+      class="mi-workspace-host"
+
+    >
+
+      <RouteMasterPanel />
 
     </section>
 

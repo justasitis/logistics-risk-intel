@@ -139,6 +139,64 @@ def test_fcl_only_scope():
     assert report["definitions"]["scope"].startswith("집계 대상: cargo_type3 == 'FCL'")
 
 
+# ---------- 고정 행(fixed rows) + dprt 매칭 ----------
+
+FERRY_GROUPS = GROUPS + [
+    {
+        "group_id": "CHINA_TO_KOREA",
+        "name": "중국 항만 선적 / 한국 항만 도착",
+        "arvl_codes": ["KR*"],
+        "dprt_codes": ["CNTSN", "CNSHA"],
+        "stopby_match": [],
+        "stopby_exclude": [],
+        "fixed_rows": [
+            {
+                "country": "FERRY_NORTH_CN",
+                "country_label": "북중국(훼리)",
+                "values": {"Avg": 1, "Min": 1, "Max": 1},
+                "note": "사용자 제공 고정값",
+            }
+        ],
+    }
+]
+
+
+def test_fixed_rows_all_months_same_value():
+    df = pd.DataFrame([
+        _row(dprt="CNTSN", arvl="KRPUS", onboard_date="2026-05-01", ata="2026-05-03"),
+        _row(dprt="CNSHA", arvl="KRBNP", onboard_date="2026-06-01", ata="2026-06-04"),
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=FERRY_GROUPS)
+    group = next(g for g in report["groups"] if g["group_id"] == "CHINA_TO_KOREA")
+
+    # dprt 매칭 + arvl 와일드카드: CN 행에 실적 집계
+    assert _cell(report, "CHINA_TO_KOREA", "CN", "Avg", "2026-05") == 2.0
+    assert _cell(report, "CHINA_TO_KOREA", "CN", "Avg", "2026-06") == 3.0
+    # 한국 선적이 아니므로 KR 행은 비어 있음
+    assert _cell(report, "CHINA_TO_KOREA", "KR", "Avg", "2026-05") is None
+
+    # 고정 행: 모든 월 열 동일 값 + fixed 플래그
+    fixed_avg = next(
+        r for r in group["rows"] if r["country"] == "FERRY_NORTH_CN" and r["stat"] == "Avg"
+    )
+    assert fixed_avg["fixed"] is True
+    assert fixed_avg["country_label"] == "북중국(훼리)"
+    assert fixed_avg["cells"] == {"2026-05": 1, "2026-06": 1}
+    fixed_max = next(
+        r for r in group["rows"] if r["country"] == "FERRY_NORTH_CN" and r["stat"] == "Max"
+    )
+    assert fixed_max["cells"] == {"2026-05": 1, "2026-06": 1}
+    assert "고정값" in report["definitions"]["fixed_rows"]
+
+
+def test_dprt_codes_filter_excludes_other_ports():
+    df = pd.DataFrame([
+        _row(dprt="CNSZX", arvl="KRPUS", onboard_date="2026-05-01", ata="2026-05-03"),  # dprt_codes 외
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=FERRY_GROUPS)
+    assert _cell(report, "CHINA_TO_KOREA", "CN", "Avg", "2026-05") is None
+
+
 # ---------- API ----------
 
 def test_api_leadtime(monkeypatch):

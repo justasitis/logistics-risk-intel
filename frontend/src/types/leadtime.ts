@@ -11,6 +11,8 @@ export interface LeadtimeRow {
   country_label: string
   stat: string // Avg | Min | Max
   cells: Record<string, number>
+  fixed?: boolean
+  fixed_note?: string
 }
 
 export interface LeadtimeGroup {

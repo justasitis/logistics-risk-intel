@@ -5,8 +5,16 @@ import {
   getLeadtimeReport,
   putLeadtimeOverrides,
 } from '../services/leadtimeApi'
-import type { InsightDraftResponse, LeadtimeGroup, LeadtimeReport } from '../types/leadtime'
+import type {
+  InsightDraftResponse,
+  LeadtimeGroup,
+  LeadtimeReport,
+  LeadtimeRow,
+} from '../types/leadtime'
+import FreightIndicesChart from './FreightIndicesChart.vue'
 import MiInsightDraftPanel from './MiInsightDraftPanel.vue'
+
+const freightChart = ref<InstanceType<typeof FreightIndicesChart> | null>(null)
 
 const report = ref<LeadtimeReport | null>(null)
 const insight = ref<InsightDraftResponse | null>(null)
@@ -31,12 +39,6 @@ async function load() {
 }
 
 onMounted(load)
-
-function cellText(group: LeadtimeGroup, country: string, stat: string, month: string): string {
-  const row = group.rows.find((r) => r.country === country && r.stat === stat)
-  const value = row?.cells[month]
-  return value === undefined ? '' : String(value)
-}
 
 function cellKey(groupId: string, country: string, stat: string, month: string): string {
   return `${groupId}|${country}|${stat}|${month}`
@@ -86,11 +88,37 @@ async function resetCells() {
 }
 
 const STATS = ['Avg', 'Min', 'Max'] as const
-const COUNTRIES = [
-  { code: 'KR', label: '한국' },
-  { code: 'CN', label: '중국' },
-  { code: 'JP', label: '일본' },
-] as const
+
+interface CountryBlock {
+  country: string
+  label: string
+  fixed: boolean
+  rowsByStat: Record<string, LeadtimeRow | undefined>
+}
+
+/** 그룹의 행을 국가(또는 고정 행) 단위 블록으로 묶기 — 고정 행(훼리 등) 포함 범용 처리 */
+function countryBlocks(group: LeadtimeGroup): CountryBlock[] {
+  const blocks: CountryBlock[] = []
+  for (const row of group.rows) {
+    let block = blocks.find((b) => b.country === row.country)
+    if (!block) {
+      block = {
+        country: row.country,
+        label: row.country_label,
+        fixed: row.fixed === true,
+        rowsByStat: {},
+      }
+      blocks.push(block)
+    }
+    block.rowsByStat[row.stat] = row
+  }
+  return blocks
+}
+
+function rowCellText(row: LeadtimeRow | undefined, month: string): string {
+  const value = row?.cells[month]
+  return value === undefined ? '' : String(value)
+}
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -109,12 +137,14 @@ function exportHtml() {
       const head = r.month_columns
         .map((m) => `<th class="${m.kind}">${m.label}</th>`)
         .join('')
-      const body = COUNTRIES.map((c) => {
+      const body = countryBlocks(g).map((block) => {
         const rows = STATS.map((stat, i) => {
           const cells = r.month_columns
-            .map((m) => `<td class="${m.kind}">${escapeHtml(cellText(g, c.code, stat, m.key))}</td>`)
+            .map((m) => `<td class="${m.kind}">${escapeHtml(rowCellText(block.rowsByStat[stat], m.key))}</td>`)
             .join('')
-          const labelCell = i === 0 ? `<td rowspan="3">${c.label}</td>` : ''
+          const labelCell = i === 0
+            ? `<td rowspan="3">${escapeHtml(block.label)}${block.fixed ? ' (고정값)' : ''}</td>`
+            : ''
           return `<tr>${labelCell}<td>${stat}</td>${cells}</tr>`
         })
         return rows.join('')
@@ -153,6 +183,10 @@ ul{font-size:11px;color:#607086}
 <h1>물류 MI Report — 항로별 리드타임</h1>
 <p class="meta">조회 시점 기준 자동 집계 · 출처: ${escapeHtml(r.source)} · 생성: ${escapeHtml(r.generated_at)}</p>
 ${insightHtml}
+${(() => {
+  const svg = freightChart.value?.getSvgHtml()
+  return svg ? `<h2>시황 (운임지수, USD/40')</h2>${svg}` : ''
+})()}
 ${sections}
 <h2>정의</h2><ul>${defs}</ul>
 </body></html>`
@@ -198,6 +232,8 @@ ${sections}
     <template v-if="report">
       <MiInsightDraftPanel v-model:draft="insight" />
 
+      <FreightIndicesChart ref="freightChart" />
+
       <section v-for="group in report.groups" :key="group.group_id" class="group">
         <h3 class="group-name">{{ group.name }}</h3>
         <table>
@@ -215,16 +251,19 @@ ${sections}
             </tr>
           </thead>
           <tbody>
-            <template v-for="c in COUNTRIES" :key="c.code">
-              <tr v-for="(stat, i) in STATS" :key="`${c.code}-${stat}`">
-                <td v-if="i === 0" :rowspan="3" class="country">{{ c.label }}</td>
+            <template v-for="block in countryBlocks(group)" :key="block.country">
+              <tr v-for="(stat, i) in STATS" :key="`${block.country}-${stat}`">
+                <td v-if="i === 0" :rowspan="3" class="country">
+                  {{ block.label }}
+                  <span v-if="block.fixed" class="fixed-badge" title="사용자 제공 고정값 (실데이터 집계 아님)">고정값</span>
+                </td>
                 <td class="stat">{{ stat }}</td>
                 <td
                   v-for="m in report.month_columns"
                   :key="m.key"
                   :class="{
                     forecast: m.kind === 'forecast',
-                    edited: isEdited(cellKey(group.group_id, c.code, stat, m.key)),
+                    edited: isEdited(cellKey(group.group_id, block.country, stat, m.key)),
                   }"
                 >
                   <input
@@ -232,10 +271,10 @@ ${sections}
                     type="number"
                     step="0.1"
                     class="cell-input"
-                    :value="editValues[cellKey(group.group_id, c.code, stat, m.key)] ?? cellText(group, c.code, stat, m.key)"
-                    @input="onCellInput(cellKey(group.group_id, c.code, stat, m.key), $event)"
+                    :value="editValues[cellKey(group.group_id, block.country, stat, m.key)] ?? rowCellText(block.rowsByStat[stat], m.key)"
+                    @input="onCellInput(cellKey(group.group_id, block.country, stat, m.key), $event)"
                   />
-                  <template v-else>{{ cellText(group, c.code, stat, m.key) }}</template>
+                  <template v-else>{{ rowCellText(block.rowsByStat[stat], m.key) }}</template>
                 </td>
               </tr>
             </template>
@@ -349,6 +388,18 @@ td.edited {
 td.country {
   font-weight: 700;
   background: var(--li-bg-app-2);
+}
+
+.fixed-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 400;
+  background: var(--li-risk-high-bg);
+  color: var(--li-risk-high);
+  border: 1px solid var(--li-risk-high-border);
 }
 .definitions ul {
   margin: 0;
