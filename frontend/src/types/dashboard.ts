@@ -33,8 +33,6 @@ export interface ScheduleEvent {
   delivery_req_breach_days?: number | null
   po_count?: number | null
   item_count?: number | null
-  /** PO 번호 유니크 목록 — "PO-1, PO-2 외 N" 문자열 (백엔드 추가 예정, optional) */
-  po_nos?: string
   quantity_sum?: number | null
   quantity_unit?: string | null
   headline: string
@@ -74,8 +72,6 @@ export interface TransportRecord {
   eta_initial?: string | null
   po_count?: number | null
   item_count?: number | null
-  /** PO 번호 유니크 목록 — "PO-1, PO-2 외 N" 문자열 (백엔드 추가 예정, optional) */
-  po_nos?: string
   quantity_sum?: number | null
   quantity_unit?: string | null
   etd_delay_count_recent?: number | null
