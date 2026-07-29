@@ -287,3 +287,56 @@ class TestCompanyMapping:
             company_codes=["SKO"], max_rows=1_000,
         )
         assert "cmpy_cd = 'S000'" in captured["$filter"]
+
+
+class TestHistoryChunkSizing:
+    def test_default_chunk_size_is_100(self, monkeypatch):
+        monkeypatch.delenv("HISTORY_CHUNK_SIZE", raising=False)
+        calls = []
+        _mock_get(monkeypatch, lambda params: calls.append(1) or {"elements": []})
+        fetch_bl_history_for_transports(
+            [("S000", "P1", f"TR{i:07d}") for i in range(150)],
+        )
+        assert len(calls) == 2  # 100 + 50
+
+    def test_env_override_chunk_size(self, monkeypatch):
+        monkeypatch.setenv("HISTORY_CHUNK_SIZE", "10")
+        calls = []
+        _mock_get(monkeypatch, lambda params: calls.append(1) or {"elements": []})
+        fetch_bl_history_for_transports(
+            [("S000", "P1", f"TR{i:07d}") for i in range(25)],
+        )
+        assert len(calls) == 3  # 10 + 10 + 5
+
+    def test_explicit_chunk_size_still_honored(self, monkeypatch):
+        calls = []
+        _mock_get(monkeypatch, lambda params: calls.append(1) or {"elements": []})
+        fetch_bl_history_for_transports(
+            [("S000", "P1", f"TR{i:07d}") for i in range(25)],
+            chunk_size=20,
+        )
+        assert len(calls) == 2  # 20 + 5
+
+    def test_invalid_env_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("HISTORY_CHUNK_SIZE", "abc")
+        calls = []
+        _mock_get(monkeypatch, lambda params: calls.append(1) or {"elements": []})
+        fetch_bl_history_for_transports(
+            [("S000", "P1", f"TR{i:07d}") for i in range(150)],
+        )
+        assert len(calls) == 2
+
+    def test_etd_to_filter_uses_next_day_exclusive(self, monkeypatch):
+        captured = {}
+        _mock_get(monkeypatch, lambda params: captured.update(params) or {"elements": []})
+        fetch_bl_info(etd_to=date(2026, 7, 15))
+        assert "etd < '2026-07-16'" in captured["$filter"]
+
+    def test_etd_from_and_to_together(self, monkeypatch):
+        captured = {}
+        _mock_get(monkeypatch, lambda params: captured.update(params) or {"elements": []})
+        fetch_bl_info(
+            etd_from=date(2026, 7, 1), etd_to=date(2026, 7, 15),
+        )
+        assert "etd >= '2026-07-01'" in captured["$filter"]
+        assert "etd < '2026-07-16'" in captured["$filter"]

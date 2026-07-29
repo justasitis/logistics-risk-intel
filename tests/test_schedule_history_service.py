@@ -482,3 +482,32 @@ class TestSearchFieldAggregation:
         record = snapshot.iloc[0]
         assert record["sppl_names"] == "공급A"
         assert record["item_names"] == "품목A"
+
+
+class TestPoNosAggregation:
+    def test_po_nos_unique_capped_at_five(self):
+        rows = [
+            _info_row(po_no=f"PO{i}") for i in range(7)
+        ]
+        snapshot = build_transport_snapshot(
+            pd.DataFrame(rows), active_only=False,
+        )
+        assert snapshot.iloc[0]["po_nos"] == (
+            "PO0, PO1, PO2, PO3, PO4 외 2개"
+        )
+
+    def test_po_nos_within_limit(self):
+        snapshot = build_transport_snapshot(
+            pd.DataFrame([
+                _info_row(po_no="PO2"),
+                _info_row(po_no="PO1"),
+                _info_row(po_no="PO1"),
+            ]),
+            active_only=False,
+        )
+        assert snapshot.iloc[0]["po_nos"] == "PO1, PO2"
+
+    def test_po_nos_missing_column_is_empty(self):
+        df = pd.DataFrame([_info_row()]).drop(columns=["po_no"])
+        snapshot = build_transport_snapshot(df, active_only=False)
+        assert snapshot.iloc[0]["po_nos"] == ""

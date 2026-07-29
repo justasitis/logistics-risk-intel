@@ -29,10 +29,15 @@ export async function getRouteMaster(params: {
   companies: string[]
   dims: string[]
   etdDays?: number
+  etdFrom?: string
+  etdTo?: string
 }): Promise<RouteMasterResponse> {
   const query = new URLSearchParams()
   if (params.companies.length) query.set('companies', params.companies.join(','))
   if (params.dims.length) query.set('dims', params.dims.join(','))
+  // 백엔드가 from/to를 지원하면 사용, 미지원 시 etd_days로 폴�(기간 일수)
+  if (params.etdFrom) query.set('etd_from', params.etdFrom)
+  if (params.etdTo) query.set('etd_to', params.etdTo)
   query.set('etd_days', String(params.etdDays ?? 365))
   return parseResponse(
     await fetch(`${API_BASE}/api/routes/master?${query.toString()}`),

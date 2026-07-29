@@ -6,7 +6,7 @@ B-LAP 일정 이상탐지 전용 Denodo 클라이언트.
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Iterable, Optional, Sequence
 
 import pandas as pd
@@ -202,6 +202,7 @@ def _fetch_view(
 def fetch_bl_info(
     *,
     etd_from: Optional[date] = None,
+    etd_to: Optional[date] = None,
     companies: Optional[Sequence[str]] = None,
     plants: Optional[Sequence[str]] = None,
     hbl_nos: Optional[Sequence[str]] = None,
@@ -212,6 +213,12 @@ def fetch_bl_info(
     filters: list[str] = []
     if etd_from:
         filters.append(f"etd >= '{etd_from.strftime('%Y-%m-%d')}'")
+    if etd_to:
+        # etd_to 당일을 포함하기 위해 익일 미만으로 비교한다.
+        filters.append(
+            f"etd < "
+            f"'{(etd_to + timedelta(days=1)).strftime('%Y-%m-%d')}'"
+        )
     if companies:
         expr = " or ".join(
             f"cmpy_nm = '{_escape_literal(normalize_company_name(v))}'"
@@ -275,6 +282,13 @@ def fetch_bl_history(
 def _chunked(values: Sequence[Any], size: int) -> Iterable[Sequence[Any]]:
     for index in range(0, len(values), size):
         yield values[index:index + size]
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, "")))
+    except ValueError:
+        return default
 
 
 
@@ -347,8 +361,8 @@ def fetch_bl_history_for_transports(
     transport_keys: Sequence[tuple[str, str, str]],
     *,
     changed_from: Optional[date] = None,
-    chunk_size: int = 20,
-    max_rows_per_chunk: int = 10_000,
+    chunk_size: Optional[int] = None,
+    max_rows_per_chunk: Optional[int] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
 ) -> pd.DataFrame:
@@ -359,7 +373,19 @@ def fetch_bl_history_for_transports(
     Denodo 원천 History의 cmpy_cd/plnt_cd가 Snapshot과 다를 수 있으므로
     원천 조회 조건은 trpr_no만 사용한다. 조회 후 Transportation No.가
     유일한 경우 Snapshot의 회사/Plant Key로 재매핑한다.
+
+    chunk는 순차 HTTP 호출이라 운송 수가 많으면(전체 법인) 왕복 횟수가
+    병목이다. chunk 크기는 HISTORY_CHUNK_SIZE(기본 100), chunk당 행 상한은
+    HISTORY_MAX_ROWS_PER_CHUNK(기본 20000) 환경변수로 조정한다.
     """
+    chunk_size = max(
+        1, chunk_size or _int_env("HISTORY_CHUNK_SIZE", 100),
+    )
+    max_rows_per_chunk = max(
+        1,
+        max_rows_per_chunk
+        or _int_env("HISTORY_MAX_ROWS_PER_CHUNK", 20_000),
+    )
     normalized_keys = sorted({
         (
             _normalized_code(cmpy_cd),

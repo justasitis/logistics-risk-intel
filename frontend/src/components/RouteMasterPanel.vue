@@ -15,6 +15,9 @@ const COMPANY_OPTIONS = ['SKO', 'SKOH', 'SKBM', 'SKBA', 'SKOJ', 'SKOY']
 
 const selectedDims = ref<string[]>(['cmpy_nm'])
 const selectedCompanies = ref<string[]>([])
+// 기간 기본값: 올해 1월 1일 ~ 오늘 (조회 버튼 클릭 시에만 조회)
+const etdFrom = ref(`${new Date().getFullYear()}-01-01`)
+const etdTo = ref(new Date().toISOString().slice(0, 10))
 const result = ref<RouteMasterResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -37,9 +40,18 @@ async function query() {
   error.value = ''
   queried.value = true
   try {
+    const days = Math.max(
+      1,
+      Math.round(
+        (new Date(etdTo.value).getTime() - new Date(etdFrom.value).getTime()) / 86_400_000,
+      ),
+    )
     result.value = await getRouteMaster({
       companies: selectedCompanies.value,
       dims: selectedDims.value,
+      etdFrom: etdFrom.value,
+      etdTo: etdTo.value,
+      etdDays: days,
     })
   } catch (e) {
     result.value = null
@@ -83,6 +95,12 @@ function dimValue(row: RouteMasterRow, key: string): string {
           {{ c }}
         </label>
         <span class="hint-inline">(미선택 시 전체)</span>
+      </div>
+      <div class="row">
+        <span class="label">기간</span>
+        <input v-model="etdFrom" type="date" class="date-input" />
+        <span class="hint-inline">~</span>
+        <input v-model="etdTo" type="date" class="date-input" />
       </div>
       <div class="row">
         <button class="btn primary" :disabled="loading" @click="query">
@@ -175,6 +193,14 @@ function dimValue(row: RouteMasterRow, key: string): string {
 .hint-inline {
   font-size: 12px;
   color: var(--li-text-faint);
+}
+.date-input {
+  padding: 5px 8px;
+  border: 1px solid var(--li-border);
+  border-radius: var(--li-radius-sm);
+  background: var(--li-surface-strong);
+  color: var(--li-text);
+  font-size: 12px;
 }
 .btn {
   padding: 6px 16px;

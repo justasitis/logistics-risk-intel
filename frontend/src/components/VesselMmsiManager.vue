@@ -458,7 +458,9 @@ function saveAisMappings() {
 
             <tr v-if="filteredRows.length === 0">
               <td colspan="8" class="empty-cell">
-                조건에 맞는 선박이 없습니다.
+                {{ props.transports.length === 0
+                  ? '운송 데이터가 없습니다. 대시보드에서 먼저 데이터를 조회하세요.'
+                  : '조건에 맞는 선박이 없습니다.' }}
               </td>
             </tr>
           </tbody>

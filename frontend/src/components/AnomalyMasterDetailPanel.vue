@@ -470,11 +470,39 @@ function miValidPeriod(impact: MiTransportImpact): string {
               </div>
               <div>
                 <dt>PO</dt>
-                <dd>{{ selectedTransport.po_count ?? 0 }}건</dd>
+                <dd>
+                  <details v-if="selectedTransport.po_nos" class="inline-list">
+                    <summary>{{ selectedTransport.po_count ?? 0 }}건</summary>
+                    <div class="inline-list__body">
+                      <span
+                        v-for="po in selectedTransport.po_nos.split(',')"
+                        :key="po"
+                        class="inline-list__item"
+                      >{{ po.trim() }}</span>
+                    </div>
+                  </details>
+                  <template v-else>{{ selectedTransport.po_count ?? 0 }}건</template>
+                </dd>
               </div>
               <div>
                 <dt>Item</dt>
-                <dd>{{ selectedTransport.item_count ?? 0 }}개</dd>
+                <dd>
+                  <details v-if="(selectedTransport.item_cds?.length ?? 0) > 0" class="inline-list">
+                    <summary>{{ selectedTransport.item_count ?? 0 }}개</summary>
+                    <div class="inline-list__body">
+                      <span
+                        v-for="cd in selectedTransport.item_cds ?? []"
+                        :key="cd"
+                        class="inline-list__item"
+                      >{{ cd }}</span>
+                      <span
+                        v-if="selectedTransport.item_names"
+                        class="inline-list__names"
+                      >{{ selectedTransport.item_names }}</span>
+                    </div>
+                  </details>
+                  <template v-else>{{ selectedTransport.item_count ?? 0 }}개</template>
+                </dd>
               </div>
             </dl>
 
@@ -1060,6 +1088,32 @@ function miValidPeriod(impact: MiTransportImpact): string {
 
 .anomaly-master-detail__empty--detail {
   min-height: 100%;
+}
+
+.inline-list summary {
+  cursor: pointer;
+}
+
+.inline-list__body {
+  display: flex;
+  max-height: 72px;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  overflow-y: auto;
+}
+
+.inline-list__item {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--li-bg-app-2);
+  font-size: 12px;
+}
+
+.inline-list__names {
+  width: 100%;
+  color: var(--li-text-muted);
+  font-size: 12px;
 }
 
 .danger-text {

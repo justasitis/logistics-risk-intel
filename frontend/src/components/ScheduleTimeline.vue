@@ -457,11 +457,11 @@ function eventClass(event: TimelineEvent) {
 }
 
 .change-badge {
-  padding: 2px 5px;
+  padding: 3px 7px;
   border-radius: 8px;
   background: rgba(80, 176, 221, 0.1);
   color: #8bcbe7;
-  font-size: 7px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -489,7 +489,8 @@ function eventClass(event: TimelineEvent) {
 }
 
 .timeline-date-change strong {
-  color: #e1f3fc;
+  color: var(--li-blue);
+  font-weight: 800;
 }
 
 .timeline-actor {

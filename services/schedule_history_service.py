@@ -145,6 +145,8 @@ def build_transport_snapshot(info_df: pd.DataFrame, *, active_only: bool = True)
             "sppl_names": _capped_unique_join(_series(group, "sppl_nm")),
             "item_names": _capped_unique_join(_series(group, "item_nm")),
             "item_cds": _unique_values(_series(group, "item_cd")),
+            # 선택 운송의 PO 번호 목록 (최대 5개+외 N개)
+            "po_nos": _capped_unique_join(_series(group, "po_no"), limit=5),
             "completed": completed,
             "cmpl_yn": cmpl_yn,
             "source_row_count": len(group),

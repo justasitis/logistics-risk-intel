@@ -53,6 +53,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 
 import json
 import os
+import re
 
 from pydantic import BaseModel, ValidationError
 
@@ -512,6 +513,8 @@ def schedule_overview(
 
             "sppl_names", "item_names", "item_cds",
 
+            "po_nos",
+
             "etd_initial", "eta_initial",
 
             "po_count", "item_count",
@@ -903,6 +906,9 @@ def route_master(
     companies: list[str] = Query(default=[]),
     dims: list[str] = Query(default=[]),
     etd_days: int = Query(default=365, ge=30, le=1_500),
+    etd_from: str | None = Query(default=None),
+    etd_to: str | None = Query(default=None),
+    refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """PORT TO PORT + 최종 도착지 조합 마스터 (구분자 선택 그룹화)."""
     selected_dims = list(dict.fromkeys(dims))
@@ -919,9 +925,54 @@ def route_master(
             ),
         )
 
+    def _parse_day(value: str | None, name: str) -> date | None:
+        if value is None or not value.strip():
+            return None
+        text = value.strip()
+        # Python 3.11+의 fromisoformat은 YYYYMMDD도 받으므로
+        # 계약 형식(YYYY-MM-DD)을 먼저 강제한다.
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{name}은 YYYY-MM-DD 형식이어야 합니다: {value}",
+            )
+        try:
+            return date.fromisoformat(text)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{name}은 YYYY-MM-DD 형식이어야 합니다: {value}",
+            ) from exc
+
+    from_day = _parse_day(etd_from, "etd_from")
+    to_day = _parse_day(etd_to, "etd_to")
+    if from_day and to_day and from_day > to_day:
+        raise HTTPException(
+            status_code=422,
+            detail="etd_from이 etd_to보다 늦습니다.",
+        )
+    # 기간 미지정이면 etd_days 상대 방식(기존 동작), from만 있으면 from~today.
+    effective_from = (
+        from_day if from_day else date.today() - timedelta(days=etd_days)
+    )
+
+    cache_key = _cache_key(
+        companies,
+        etd_days,
+        from_day.isoformat() if from_day else "-",
+        to_day.isoformat() if to_day else "-",
+        hash(tuple(selected_dims)),
+    )
+    key = f"route-master|{cache_key}"
+    if not refresh and key in _CACHE:
+        cached_at, payload = _CACHE[key]
+        if time.time() - cached_at <= CACHE_TTL_SECONDS:
+            return {**payload, "cache_hit": True}
+
     try:
         info_df = fetch_bl_info(
-            etd_from=date.today() - timedelta(days=etd_days),
+            etd_from=effective_from,
+            etd_to=to_day,
             companies=companies or None,
             max_rows=50_000,
         )
@@ -956,12 +1007,15 @@ def route_master(
                 mode_code, mode_code,
             )
 
-    return _clean_value({
+    payload = _clean_value({
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "cache_hit": False,
         "total_rows": total_rows,
         "truncated": truncated,
         "rows": records,
     })
+    _CACHE[key] = (time.time(), payload)
+    return payload
 
 
  

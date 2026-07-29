@@ -21,6 +21,14 @@ def _allow_testclient_http(monkeypatch):
     monkeypatch.setattr(httpx.Client, "request", _REAL_HTTPX_REQUEST)
 
 
+@pytest.fixture(autouse=True)
+def _clear_api_cache():
+    # routes/master TTL 캐시가 테스트 간에 공유되지 않도록 초기화한다.
+    api_server._CACHE.clear()
+    yield
+    api_server._CACHE.clear()
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -242,3 +250,81 @@ class TestFreightIndices:
             sharepoint_root, {"scfi": [{"date": "d", "value": "abc"}]},
         )
         assert client.get("/api/report/freight-indices").status_code == 502
+
+
+# ---------- ② routes/master 기간 파라미터 + TTL 캐시 ----------
+
+class TestRouteMasterPeriod:
+    def test_etd_from_and_to_passed_to_client(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        response = client.get(
+            "/api/routes/master",
+            params={"etd_from": "2026-07-01", "etd_to": "2026-07-15"},
+        )
+        assert response.status_code == 200
+        from datetime import date
+        assert mock_bl_info.captured["etd_from"] == date(2026, 7, 1)
+        assert mock_bl_info.captured["etd_to"] == date(2026, 7, 15)
+
+    def test_etd_from_only_means_from_to_today(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        response = client.get(
+            "/api/routes/master", params={"etd_from": "2026-07-01"},
+        )
+        assert response.status_code == 200
+        from datetime import date
+        assert mock_bl_info.captured["etd_from"] == date(2026, 7, 1)
+        assert mock_bl_info.captured["etd_to"] is None
+
+    def test_no_period_falls_back_to_etd_days(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        response = client.get("/api/routes/master")
+        assert response.status_code == 200
+        assert mock_bl_info.captured["etd_to"] is None
+        # etd_from은 today - 365일 근사치로 계산된다.
+        assert mock_bl_info.captured["etd_from"] is not None
+
+    def test_invalid_date_is_422(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        response = client.get(
+            "/api/routes/master", params={"etd_from": "20260701"},
+        )
+        assert response.status_code == 422
+
+    def test_from_after_to_is_422(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        response = client.get(
+            "/api/routes/master",
+            params={"etd_from": "2026-07-15", "etd_to": "2026-07-01"},
+        )
+        assert response.status_code == 422
+
+    def test_ttl_cache_hit(self, client, monkeypatch):
+        api_server._CACHE.clear()
+        calls = []
+
+        def _fake(**kwargs):
+            calls.append(kwargs)
+            return _bl_info_df([_info_row()])
+
+        monkeypatch.setattr(api_server, "fetch_bl_info", _fake)
+        params = {"etd_from": "2026-07-01", "etd_to": "2026-07-15"}
+        first = client.get("/api/routes/master", params=params)
+        second = client.get("/api/routes/master", params=params)
+        assert first.json()["cache_hit"] is False
+        assert second.json()["cache_hit"] is True
+        assert len(calls) == 1  # 두 번째 호출은 캐시
+
+    def test_refresh_bypasses_cache(self, client, monkeypatch):
+        api_server._CACHE.clear()
+        calls = []
+
+        def _fake(**kwargs):
+            calls.append(kwargs)
+            return _bl_info_df([_info_row()])
+
+        monkeypatch.setattr(api_server, "fetch_bl_info", _fake)
+        params = {"etd_from": "2026-07-01", "refresh": "true"}
+        client.get("/api/routes/master", params=params)
+        client.get("/api/routes/master", params=params)
+        assert len(calls) == 2
