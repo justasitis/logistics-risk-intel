@@ -252,7 +252,7 @@ function eventClass(event: TimelineEvent) {
   display: block;
   margin-bottom: 3px;
   color: #3abfe6;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.13em;
 }
@@ -271,7 +271,7 @@ function eventClass(event: TimelineEvent) {
   border-radius: 5px;
   background: rgba(7, 28, 47, 0.75);
   color: #6f93a9;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .timeline-tabs button.active {
@@ -319,7 +319,7 @@ function eventClass(event: TimelineEvent) {
 
 .timeline-route strong {
   color: #d9effb;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .timeline-route-line {
@@ -377,7 +377,7 @@ function eventClass(event: TimelineEvent) {
 
 .timeline-summary strong {
   color: #d7edf9;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .timeline-summary strong.delayed {
@@ -481,7 +481,7 @@ function eventClass(event: TimelineEvent) {
   gap: 6px;
   margin-top: 5px;
   color: #789db2;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .timeline-date-change .arrow {
@@ -512,7 +512,7 @@ function eventClass(event: TimelineEvent) {
   border-radius: 7px;
   background: rgba(5, 24, 40, 0.52);
   color: #66899e;
-  font-size: 9px;
+  font-size: 11px;
   text-align: center;
 }
 

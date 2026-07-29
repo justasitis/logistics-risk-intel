@@ -2335,10 +2335,9 @@ onMounted(() => {
 
   }, 1000)
 
+  // 시작 시 자동 overview 조회는 하지 않는다.
 
- 
-
-  void loadDashboard(true)
+  // 사용자가 법인 변경/새로고침으로 명시 조회할 때만 loadDashboard가 동작한다.
 
 })
 
@@ -2587,6 +2586,15 @@ onBeforeUnmount(() => {
       class="dashboard"
 
     >
+
+      <div
+        v-if="!dashboard && !loading"
+        class="idle-banner"
+      >
+        법인을 선택하거나 새로고침을 눌러 데이터를 조회하세요.
+      </div>
+
+
 
       <section class="map-panel">
 
@@ -3702,6 +3710,28 @@ onBeforeUnmount(() => {
 
 
  
+
+.idle-banner {
+
+  grid-column: 1 / -1;
+
+  padding: 10px 14px;
+
+  border-bottom: 1px solid var(--li-border);
+
+  background: var(--li-surface-blue);
+
+  color: var(--li-blue);
+
+  font-size: 12px;
+
+  font-weight: 700;
+
+  text-align: center;
+
+}
+
+
 
 .workspace-tabs {
 
