@@ -19,6 +19,9 @@ const props = defineProps<{
   miZones: GeoJsonFeatureCollection
   miImpactedRoutes: GeoJsonFeatureCollection
   selectedMiEventId?: string
+  /** 레지스트리(미승인, 추적 중) 영향권 — 승인 영향권과 스타일 구분 */
+  registryZones?: GeoJsonFeatureCollection
+  showRegistryZones?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -336,6 +339,12 @@ onMounted(() => {
       generateId: true,
     })
 
+    map.addSource('registry-zones', {
+      type: 'geojson',
+      data: (props.registryZones ?? emptyFeatureCollection) as unknown as GeoJSON.FeatureCollection,
+      generateId: true,
+    })
+
     if (!map.hasImage('vessel-arrow')) {
       map.addImage('vessel-arrow', createVesselArrow(), { pixelRatio: 2 })
     }
@@ -456,6 +465,48 @@ onMounted(() => {
         ],
         'line-width': 2,
         'line-opacity': 0.82,
+      },
+    })
+
+    map.addLayer({
+      id: 'registry-zone-fill',
+      type: 'fill',
+      source: 'registry-zones',
+      layout: {
+        visibility: (props.showRegistryZones ?? true) ? 'visible' : 'none',
+      },
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'severity'],
+          'CRITICAL', '#ff3158',
+          'HIGH', '#ff8a28',
+          'MEDIUM', '#ffd24a',
+          '#47d7ff',
+        ],
+        'fill-opacity': 0.06,
+      },
+    })
+
+    map.addLayer({
+      id: 'registry-zone-line',
+      type: 'line',
+      source: 'registry-zones',
+      layout: {
+        visibility: (props.showRegistryZones ?? true) ? 'visible' : 'none',
+      },
+      paint: {
+        'line-color': [
+          'match',
+          ['get', 'severity'],
+          'CRITICAL', '#ff3158',
+          'HIGH', '#ff8a28',
+          'MEDIUM', '#ffd24a',
+          '#47d7ff',
+        ],
+        'line-width': 1.5,
+        'line-opacity': 0.6,
+        'line-dasharray': [3, 2],
       },
     })
 
@@ -717,6 +768,30 @@ watch(
     updateGeoJsonSource('mi-zones', zones)
   },
   { deep: true },
+)
+
+watch(
+  () => props.registryZones,
+  (zones) => {
+    updateGeoJsonSource(
+      'registry-zones',
+      zones ?? emptyFeatureCollection,
+    )
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.showRegistryZones,
+  (visible) => {
+    if (!map) return
+    const value = (visible ?? true) ? 'visible' : 'none'
+    for (const layer of ['registry-zone-fill', 'registry-zone-line']) {
+      if (map.getLayer(layer)) {
+        map.setLayoutProperty(layer, 'visibility', value)
+      }
+    }
+  },
 )
 
 watch(

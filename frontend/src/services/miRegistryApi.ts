@@ -1,4 +1,9 @@
-import type { RegistryRebuildResponse, RegistryResponse } from '../types/miRegistry'
+import type {
+  RegistryRebuildResponse,
+  RegistryResponse,
+  RegistryReviewResponse,
+} from '../types/miRegistry'
+import type { RegistryMapZone } from './miUpload'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -24,5 +29,30 @@ export async function getMiRegistry(status?: string): Promise<RegistryResponse> 
 export async function rebuildMiRegistry(): Promise<RegistryRebuildResponse> {
   return parseResponse(
     await fetch(`${API_BASE}/api/mi/registry/rebuild`, { method: 'POST' }),
+  )
+}
+
+export async function getRegistryMapZones(): Promise<RegistryMapZone[]> {
+  return parseResponse(await fetch(`${API_BASE}/api/mi/registry/map-zones`))
+}
+
+export async function postRegistryReview(): Promise<RegistryReviewResponse> {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/mi/registry/review`, { method: 'POST' }),
+  )
+}
+
+export async function postRegistryApply(body: {
+  event_id: string
+  suggested_status?: string
+  suggested_severity?: string
+  merge_with?: string | null
+}): Promise<unknown> {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/mi/registry/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   )
 }

@@ -340,3 +340,19 @@ class TestHistoryChunkSizing:
         )
         assert "etd >= '2026-07-01'" in captured["$filter"]
         assert "etd < '2026-07-16'" in captured["$filter"]
+
+
+class TestSelectColumnsProjection:
+    def test_default_selects_all_info_columns(self, monkeypatch):
+        captured = {}
+        _mock_get(monkeypatch, lambda params: captured.update(params) or {"elements": []})
+        fetch_bl_info()
+        assert len(captured["$select"].split(",")) == len(
+            datalake_schedule_client.INFO_SELECT_COLUMNS
+        )
+
+    def test_custom_select_columns_passed_to_server(self, monkeypatch):
+        captured = {}
+        _mock_get(monkeypatch, lambda params: captured.update(params) or {"elements": []})
+        fetch_bl_info(select_columns=["trpr_no", "dprt", "ata"])
+        assert captured["$select"] == "trpr_no,dprt,ata"

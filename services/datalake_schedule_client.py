@@ -206,6 +206,7 @@ def fetch_bl_info(
     companies: Optional[Sequence[str]] = None,
     plants: Optional[Sequence[str]] = None,
     hbl_nos: Optional[Sequence[str]] = None,
+    select_columns: Optional[Sequence[str]] = None,
     max_rows: int = 20_000,
     username: Optional[str] = None,
     password: Optional[str] = None,
@@ -232,9 +233,11 @@ def fetch_bl_info(
         expr = " or ".join(f"hbl_no = '{_escape_literal(v)}'" for v in hbl_nos)
         filters.append(f"({expr})")
 
+    # 컬럼 프로젝션도 서버측($select) — 필요한 컬럼만 받으면
+    # 대량 조회(리드타임/경로 마스터)의 페이로드가 크게 줄어든다.
     df = _fetch_view(
         view_path=INFO_VIEW_PATH,
-        select_columns=INFO_SELECT_COLUMNS,
+        select_columns=list(select_columns) if select_columns else INFO_SELECT_COLUMNS,
         filter_expr=" and ".join(filters) if filters else None,
         max_rows=max_rows,
         username=username,

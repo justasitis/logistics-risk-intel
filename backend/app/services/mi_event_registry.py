@@ -403,3 +403,119 @@ def get_event(event_id: str, registry_file: Path | None = None) -> dict[str, Any
         if event.get("event_id") == event_id:
             return event
     return None
+
+
+# ---------- 지도 영향권 / 제안 반영 ----------
+
+def map_zones(registry_file: Path | None = None) -> list[dict[str, Any]]:
+    """ACTIVE/IMPROVING 이벤트의 locations를 위치 마스터로 좌표화.
+
+    레지스트리 파일이 없거나 해석 불가 위치만 있으면 빈 배열.
+    """
+    from .mi_location_resolver import resolve_locations
+    from ..schemas.mi_ai import LocationRef
+
+    path = registry_file or registry_file_path()
+    if not path.exists():
+        return []
+    data = _load_registry(path)
+
+    zones: list[dict[str, Any]] = []
+    for event in data["events"]:
+        if event.get("status") not in ("ACTIVE", "IMPROVING"):
+            continue
+        refs = [
+            LocationRef(code=str(loc), name=str(loc))
+            for loc in event.get("locations", [])
+        ]
+        if not refs:
+            continue
+        resolved, _unresolved = resolve_locations(refs)
+        if not resolved:
+            continue
+        zones.append(
+            {
+                "event_id": event.get("event_id"),
+                "headline": event.get("headline"),
+                "severity": event.get("severity"),
+                "status": event.get("status"),
+                "locations": [
+                    {
+                        "code": loc.code,
+                        "name": loc.name,
+                        "lat": loc.lat,
+                        "lon": loc.lon,
+                        "radius_km": loc.radius_km,
+                    }
+                    for loc in resolved
+                ],
+            }
+        )
+    return zones
+
+
+def apply_proposal(
+    event_id: str,
+    status: str | None = None,
+    severity: str | None = None,
+    merge_with: str | None = None,
+    registry_file: Path | None = None,
+) -> dict[str, Any]:
+    """종합 정제 제안 수락 반영 (HITL — 건당 명시 수락만).
+
+    merge_with 지정 시 대상 이벤트를 event_id 쪽으로 병합(집합 합집합,
+    first_seen min / last_seen max / 목격일·횟수·evidence 누적) 후 제거.
+    """
+    path = registry_file or registry_file_path()
+    data = _load_registry(path)
+    events = data["events"]
+
+    target = next((e for e in events if e.get("event_id") == event_id), None)
+    if target is None:
+        raise KeyError(event_id)
+
+    if status:
+        status = status.upper()
+        if status not in STATUS_ORDER:
+            raise ValueError(f"status는 {', '.join(STATUS_ORDER)} 중 하나여야 합니다")
+        target["status"] = status
+    if severity:
+        severity = severity.upper()
+        if severity not in SEVERITY_RANK:
+            raise ValueError(f"severity는 {', '.join(SEVERITY_RANK)} 중 하나여야 합니다")
+        target["severity"] = severity
+
+    if merge_with:
+        source = next((e for e in events if e.get("event_id") == merge_with), None)
+        if source is None:
+            raise KeyError(merge_with)
+        target["first_seen"] = min(target["first_seen"], source["first_seen"])
+        target["last_seen"] = max(target["last_seen"], source["last_seen"])
+        target["sighting_count"] = (
+            target.get("sighting_count", 0) + source.get("sighting_count", 0)
+        )
+        target["sighting_dates"] = sorted(
+            set(target.get("sighting_dates", []))
+            | set(source.get("sighting_dates", []))
+        )[-_max_dates():]
+        for field in ("locations", "corridors", "keywords", "source_candidate_ids"):
+            for value in source.get(field, []):
+                if value and value not in target[field]:
+                    target[field].append(value)
+        seen_keys = {
+            str(e.get("url") or e.get("article_id") or "")
+            for e in target["evidence"]
+        }
+        for item in source.get("evidence", []):
+            key = str(item.get("url") or item.get("article_id") or "")
+            if key and key not in seen_keys:
+                seen_keys.add(key)
+                target["evidence"].append(item)
+        target["evidence"] = target["evidence"][:_max_evidence()]
+        target["merged_from"] = sorted(
+            set(target.get("merged_from", [])) | {merge_with}
+        )
+        events.remove(source)
+
+    _save_registry(path, data)
+    return target

@@ -328,3 +328,13 @@ class TestRouteMasterPeriod:
         client.get("/api/routes/master", params=params)
         client.get("/api/routes/master", params=params)
         assert len(calls) == 2
+
+
+class TestRouteMasterProjection:
+    def test_minimal_columns_requested(self, client, mock_bl_info):
+        mock_bl_info(_bl_info_df([_info_row()]))
+        client.get("/api/routes/master")
+        selected = mock_bl_info.captured["select_columns"]
+        assert set(selected) == set(api_server.ROUTE_MASTER_SELECT_COLUMNS)
+        # 88컬럼 전량이 아니라 그룹화 필요 컬럼만 요청한다.
+        assert len(selected) <= 12

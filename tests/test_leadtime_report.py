@@ -216,3 +216,32 @@ def test_api_leadtime(monkeypatch):
     assert _cell(body, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 30.0
     # months 검증
     assert client.get("/api/report/leadtime?months=2").status_code == 422
+
+
+# ---------- 성능: history 미호출 + 컬럼 프로젝션 ----------
+
+def test_fetch_leadtime_report_does_not_call_history(monkeypatch):
+    """리드타임은 bl_info만으로 계산 — history chunk 호출이 없어야 한다."""
+    called = {"info": 0}
+
+    def _fake_info(**kwargs):
+        called["info"] += 1
+        called["select_columns"] = kwargs.get("select_columns")
+        return pd.DataFrame([_row(onboard_date="2026-05-10", ata="2026-06-09")])
+
+    def _forbidden_history(*args, **kwargs):
+        raise AssertionError("리드타임 집계에서 history를 조회하면 안 됩니다")
+
+    monkeypatch.setattr(svc, "fetch_bl_info", _fake_info)
+    monkeypatch.setattr(
+        "services.datalake_schedule_client.fetch_bl_history_for_transports",
+        _forbidden_history,
+    )
+    monkeypatch.setattr(
+        "services.datalake_schedule_client.fetch_bl_history",
+        _forbidden_history,
+    )
+    report = svc.fetch_leadtime_report(months=12, forecast_months=3)
+    assert called["info"] == 1
+    assert called["select_columns"] == svc.LEADTIME_SELECT_COLUMNS
+    assert report["month_columns"]

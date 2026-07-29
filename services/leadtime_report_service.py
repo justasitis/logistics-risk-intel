@@ -36,6 +36,22 @@ ROUTE_GROUPS_PATH = (
 # 실적 조회 범위 (완료 운송 포함, 넓은 기간)
 ETD_LOOKBACK_DAYS = 400
 
+# 리드타임 집계에 필요한 컬럼만 서버측 프로젝션 ($select) — 전체 88컬럼을
+# 받으면 2만 행 × 88컬럼 JSON이 수백 MB가 되어 "집계중" 장기화의 원인이 된다.
+LEADTIME_SELECT_COLUMNS = [
+    "trpr_no",
+    "dprt",
+    "stopby",
+    "stopby_nm",
+    "cargo_type3",
+    "onboard_date",
+    "etd",
+    "atd",
+    "eta",
+    "eta_date",
+    "ata",
+]
+
 COUNTRY_ORDER = ["KR", "CN", "JP"]
 COUNTRY_LABELS = {"KR": "한국", "CN": "중국", "JP": "일본"}
 STAT_ORDER = ["Avg", "Min", "Max"]
@@ -268,9 +284,14 @@ def fetch_leadtime_report(
     months: int = 12,
     forecast_months: int = 3,
 ) -> dict[str, Any]:
-    """외부 호출 포함: bl_info 조회 → 집계."""
+    """외부 호출 포함: bl_info 조회 → 집계.
+
+    리드타임(실적 ata-onboard, 예상 current_eta-base)은 bl_info만으로
+    계산 가능하므로 history 조회는 하지 않는다.
+    """
     info_df = fetch_bl_info(
-        etd_from=date.today() - timedelta(days=ETD_LOOKBACK_DAYS)
+        etd_from=date.today() - timedelta(days=ETD_LOOKBACK_DAYS),
+        select_columns=LEADTIME_SELECT_COLUMNS,
     )
     return compute_leadtime_report(
         info_df, months=months, forecast_months=forecast_months

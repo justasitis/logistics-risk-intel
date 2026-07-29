@@ -899,6 +899,13 @@ TRPR_MODE_LABELS = {
     "200": "육상",
     "300": "항공",
 }
+# 경로 마스터 그룹화에 필요한 컬럼만 서버측 프로젝션 — 전체 88컬럼을
+# 받으면 5만 행 조회가 수백 MB가 되어 탭이 멈춘 것처럼 보인다.
+ROUTE_MASTER_SELECT_COLUMNS = [
+    "trpr_no",
+    "cmpy_nm", "plnt_nm", "lsp_nm", "bsns_ccd_nm", "trpr_mode",
+    "dprt", "dprt_nm", "arvl", "arvl_nm", "to_stlc_cd", "to_stlc_nm",
+]
 
 
 @app.get("/api/routes/master")
@@ -974,6 +981,7 @@ def route_master(
             etd_from=effective_from,
             etd_to=to_day,
             companies=companies or None,
+            select_columns=ROUTE_MASTER_SELECT_COLUMNS,
             max_rows=50_000,
         )
     except RuntimeError as exc:
@@ -1329,6 +1337,23 @@ def list_mi_registry(status: str | None = Query(default=None)) -> dict[str, Any]
         ) from exc
 
 
+@app.get("/api/mi/registry/map-zones")
+def get_mi_registry_map_zones() -> list[dict[str, Any]]:
+    """레지스트리 ACTIVE/IMPROVING 이벤트의 지도 영향권 (미승인, 추적 중)."""
+    from backend.app.services import mi_event_registry
+
+    try:
+        return mi_event_registry.map_zones()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "레지스트리 영향권 조회 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
 @app.get("/api/mi/registry/{event_id}")
 def get_mi_registry_event(event_id: str) -> dict[str, Any]:
     """MI 이벤트 레지스트리 단건 조회."""
@@ -1535,6 +1560,68 @@ def get_notifications() -> dict[str, Any]:
         "cache_hit": fully_cached,
         "items": result_items,
     }
+
+
+ 
+
+@app.post("/api/mi/registry/review")
+def review_mi_registry() -> dict[str, Any]:
+    """레지스트리 종합 정제 (Actify) — 제안만 반환, 자동 반영 없음 (HITL)."""
+    from backend.app.services.mi_registry_review import (
+        ActifyNotConfiguredError,
+        generate_registry_review,
+    )
+
+    try:
+        return generate_registry_review()
+    except ActifyNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "레지스트리 종합 정제 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
+
+
+class RegistryApplyBody(BaseModel):
+    event_id: str
+    suggested_status: str | None = None
+    suggested_severity: str | None = None
+    merge_with: str | None = None
+
+
+@app.post("/api/mi/registry/apply")
+def apply_mi_registry_proposal(body: RegistryApplyBody) -> dict[str, Any]:
+    """종합 정제 제안 수락 반영 (건당 명시)."""
+    from backend.app.services import mi_event_registry
+
+    try:
+        return mi_event_registry.apply_proposal(
+            body.event_id,
+            status=body.suggested_status,
+            severity=body.suggested_severity,
+            merge_with=body.merge_with,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"이벤트를 찾을 수 없습니다: {exc}",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "제안 반영 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
 
 
  

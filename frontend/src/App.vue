@@ -44,6 +44,13 @@ import NotificationCenter from '@/components/NotificationCenter.vue'
 
 import RouteMasterPanel from '@/components/RouteMasterPanel.vue'
 
+import { getRegistryMapZones } from '@/services/miRegistryApi'
+
+import {
+  buildRegistryZoneGeoJson,
+  type RegistryMapZone,
+} from '@/services/miUpload'
+
 
  
 
@@ -567,6 +574,36 @@ const approvedMiEvents = computed<RefinedMiEvent[]>(() =>
 
 
  
+
+const registryZoneRows = ref<RegistryMapZone[]>([])
+
+const showRegistryZones = ref(
+  localStorage.getItem('lri-registry-zones-visible') !== 'off',
+)
+
+const registryZones = computed(() =>
+  buildRegistryZoneGeoJson(registryZoneRows.value),
+)
+
+async function loadRegistryZones() {
+  try {
+    registryZoneRows.value = await getRegistryMapZones()
+  } catch {
+    registryZoneRows.value = []
+  }
+}
+
+function toggleRegistryZones() {
+  showRegistryZones.value = !showRegistryZones.value
+  localStorage.setItem(
+    'lri-registry-zones-visible',
+    showRegistryZones.value ? 'on' : 'off',
+  )
+}
+
+function handleRegistryChanged() {
+  void loadRegistryZones()
+}
 
 const miZones = computed(() =>
 
@@ -2327,6 +2364,10 @@ watch(
 
 onMounted(() => {
 
+  void loadRegistryZones()
+
+  window.addEventListener('mi-registry-changed', handleRegistryChanged)
+
   void loadManualCoordinates()
 
   void initializeMiPersistence()
@@ -2619,6 +2660,15 @@ onBeforeUnmount(() => {
 
       <section class="map-panel">
 
+        <button
+          type="button"
+          class="registry-zone-toggle"
+          :class="{ off: !showRegistryZones }"
+          @click="toggleRegistryZones"
+        >
+          레지스트리 영향권 {{ showRegistryZones ? 'ON' : 'OFF' }}
+        </button>
+
         <LogisticsMap
 
           :routes="effectiveRoutes"
@@ -2628,6 +2678,9 @@ onBeforeUnmount(() => {
           :ais-vessels="aisVessels"
 
           :mi-zones="miZones"
+          :registry-zones="registryZones"
+
+          :show-registry-zones="showRegistryZones"
 
           :mi-impacted-routes="miImpactedRoutes"
 
@@ -3745,6 +3798,50 @@ onBeforeUnmount(() => {
 
 
  
+
+.registry-zone-toggle {
+
+  position: absolute;
+
+  top: 12px;
+
+  right: 12px;
+
+  z-index: 10;
+
+  padding: 5px 12px;
+
+  border: 1px solid var(--li-border);
+
+  border-radius: 999px;
+
+  background: var(--li-surface-strong);
+
+  color: var(--li-text);
+
+  font-size: 12px;
+
+  cursor: pointer;
+
+  box-shadow: var(--li-shadow-card);
+
+}
+
+.registry-zone-toggle.off {
+
+  color: var(--li-text-faint);
+
+}
+
+
+
+.map-panel {
+
+  position: relative;
+
+}
+
+
 
 .idle-banner {
 

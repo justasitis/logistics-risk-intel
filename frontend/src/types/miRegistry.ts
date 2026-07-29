@@ -31,3 +31,16 @@ export interface RegistryRebuildResponse {
   event_count: number
   registry_file: string
 }
+
+export interface RegistryReviewProposal {
+  event_id: string
+  suggested_status: string
+  suggested_severity: string
+  merge_with: string | null
+  reason: string
+}
+
+export interface RegistryReviewResponse {
+  reviews: RegistryReviewProposal[]
+  notes: string
+}

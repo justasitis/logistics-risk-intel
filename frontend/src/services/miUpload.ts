@@ -423,7 +423,7 @@ function haversineKm(
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 
-function circlePolygon(
+export function circlePolygon(
   lon: number,
   lat: number,
   radiusKm: number,
@@ -454,6 +454,50 @@ function circlePolygon(
   }
 
   return coordinates
+}
+
+export interface RegistryMapZone {
+  event_id: string
+  headline: string
+  severity: string
+  status: string
+  locations: Array<{
+    code: string
+    name: string
+    lat: number
+    lon: number
+    radius_km: number
+  }>
+}
+
+/** 레지스트리(미승인, 추적 중) 영향권 GeoJSON — 승인 영향권과 스타일 구분용 */
+export function buildRegistryZoneGeoJson(
+  zones: RegistryMapZone[],
+): GeoJsonFeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: zones.flatMap((zone) =>
+      zone.locations.map((location) => ({
+        type: 'Feature' as const,
+        id: `${zone.event_id}|${location.code}`,
+        properties: {
+          event_id: zone.event_id,
+          headline: zone.headline,
+          severity: zone.severity,
+          status: zone.status,
+          location_code: location.code,
+          location_name: location.name,
+          radius_km: location.radius_km,
+        },
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [
+            circlePolygon(location.lon, location.lat, location.radius_km),
+          ],
+        },
+      })),
+    ),
+  }
 }
 
 export function buildMiZoneGeoJson(events: MiEvent[]): GeoJsonFeatureCollection {
