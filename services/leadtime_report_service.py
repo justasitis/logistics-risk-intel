@@ -41,6 +41,7 @@ ETD_LOOKBACK_DAYS = 400
 LEADTIME_SELECT_COLUMNS = [
     "trpr_no",
     "dprt",
+    "arvl",
     "stopby",
     "stopby_nm",
     "cargo_type3",
