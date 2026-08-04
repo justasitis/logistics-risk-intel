@@ -82,10 +82,12 @@ const charts = computed<WeekChart[]>(() => {
   const all = series.value ?? []
   const byKey = (keys: string[]) => all.filter((s) => keys.includes(s.key))
   const left = buildLines(byKey(['scfi', 'kcci']))
-  const right = buildLines(byKey(['kcci_usec', 'kcci_med']))
+  const usec = buildLines(byKey(['kcci_usec']))
+  const med = buildLines(byKey(['kcci_med']))
   const out: WeekChart[] = []
   if (left.length) out.push({ title: 'SCFI + KCCI 종합 (주차별)', lines: left })
-  if (right.length) out.push({ title: 'KCCI 세부항로 (주차별)', lines: right })
+  if (usec.length) out.push({ title: 'KCCI 북미 동안 (주차별)', lines: usec })
+  if (med.length) out.push({ title: 'KCCI 지중해 (주차별)', lines: med })
   // 키가 다륵게 들어오는 경우 전체를 하나로 폴�
   if (!out.length && all.length) {
     out.push({ title: '운임지수 (주차별)', lines: buildLines(all) })
@@ -241,6 +243,15 @@ defineExpose({ getSvgHtml })
             @mouseleave="hoverWeek = null"
           >
             <line :x1="M.left" :x2="W - M.right" :y1="yOf(chartYMax(chart), 0)" :y2="yOf(chartYMax(chart), 0)" class="axis" />
+            <line
+              v-for="w in weekTicks"
+              :key="`grid-${w}`"
+              :x1="x(w)"
+              :x2="x(w)"
+              :y1="M.top"
+              :y2="H - M.bottom"
+              class="grid-line"
+            />
             <text
               v-for="w in weekTicks"
               :key="w"
@@ -366,6 +377,11 @@ defineExpose({ getSvgHtml })
 }
 .axis {
   stroke: var(--li-border-strong);
+}
+.grid-line {
+  stroke: var(--li-border);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
 }
 .x-label {
   font-size: 12px;
