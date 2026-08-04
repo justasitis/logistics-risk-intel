@@ -1564,6 +1564,28 @@ def get_notifications() -> dict[str, Any]:
 
  
 
+@app.get("/api/mi/location-master")
+def mi_location_master() -> dict[str, Any]:
+    """위치 마스터 — 검토 패널의 위치 드롭다운/미해결 위치 매칭 선택지."""
+    from backend.app.services.mi_location_resolver import load_location_master
+
+    master = load_location_master()
+    return {
+        "locations": [
+            {
+                "code": code,
+                "name": str(item.get("name") or ""),
+                "location_type": str(item.get("location_type") or ""),
+                "lat": item.get("lat"),
+                "lon": item.get("lon"),
+                "default_radius_km": item.get("default_radius_km", 100),
+                "aliases": item.get("aliases", []),
+            }
+            for code, item in sorted(master.items())
+        ]
+    }
+
+
 @app.post("/api/mi/registry/review")
 def review_mi_registry() -> dict[str, Any]:
     """레지스트리 종합 정제 (Actify) — 제안만 반환, 자동 반영 없음 (HITL)."""

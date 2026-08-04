@@ -144,3 +144,33 @@ class TestResolveLocations:
         resolved, unresolved = resolve_locations([])
         assert resolved == []
         assert unresolved == []
+
+
+# ---------- 위치 마스터 API ----------
+
+# TestClient는 앱 낸부(ASGI) 호출 — conftest의 httpx 차단 복원용으로
+# 임포트 시점의 원본 request를 보관한다.
+import httpx  # noqa: E402
+
+_REAL_HTTPX_REQUEST = httpx.Client.request
+
+
+def test_location_master_api(tmp_path, monkeypatch):
+    """GET /api/mi/location-master — 드롭다운 선택지 반환 (코드 정렬)."""
+    from fastapi.testclient import TestClient
+
+    from api_server import app
+
+    monkeypatch.setattr(httpx.Client, "request", _REAL_HTTPX_REQUEST)
+    path = tmp_path / "master.json"
+    path.write_text(json.dumps(MASTER, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(mi_location_resolver, "MASTER_PATH", path)
+
+    resp = TestClient(app).get("/api/mi/location-master")
+    assert resp.status_code == 200
+    locations = resp.json()["locations"]
+    assert [loc["code"] for loc in locations] == ["EGSUZ", "KRPUS"]
+    busan = locations[1]
+    assert busan["name"] == "Busan"
+    assert busan["default_radius_km"] == 100
+    assert "부산" in busan["aliases"]

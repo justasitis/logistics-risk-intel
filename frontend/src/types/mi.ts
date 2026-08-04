@@ -42,6 +42,17 @@ export interface AffectedLocation {
   radius_km: number
 }
 
+/** 위치 마스터 엔트리 (GET /api/mi/location-master) — 검토 패널 드롭다운 선택지 */
+export interface MiLocationMasterEntry {
+  code: string
+  name: string
+  location_type: string
+  lat: number
+  lon: number
+  default_radius_km: number
+  aliases: string[]
+}
+
 export interface RefinedMiEvent {
   event_id: string
   source_type: string

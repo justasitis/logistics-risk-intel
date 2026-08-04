@@ -1,6 +1,7 @@
 import type {
   CompanyCode,
   ExternalMiCandidateEnvelope,
+  MiLocationMasterEntry,
   RefineResponse,
   RefinedMiEvent,
   ReviewResponse,
@@ -74,6 +75,12 @@ export async function refineExternalCandidates(
       }),
     }),
   )
+}
+
+export async function getMiLocationMaster(): Promise<{
+  locations: MiLocationMasterEntry[]
+}> {
+  return parseResponse(await fetch(`${API_BASE}/api/mi/location-master`))
 }
 
 export async function submitMiReview(

@@ -7,6 +7,7 @@ import {
   rebuildMiRegistry,
 } from '../../services/miRegistryApi'
 import type {
+  RegistryEvent,
   RegistryResponse,
   RegistryReviewProposal,
   RegistryStatus,
@@ -22,6 +23,30 @@ const STATUS_LABELS: Record<RegistryStatus, string> = {
   ACTIVE: 'ACTIVE',
   IMPROVING: 'IMPROVING',
   RESOLVED: 'RESOLVED',
+}
+const STATUS_OPTIONS: RegistryStatus[] = ['ACTIVE', 'IMPROVING', 'RESOLVED']
+
+// ---------- 상태 수동 변경 (Actify 제안 없이 직접, 건당 명시 — HITL) ----------
+const changingId = ref<string | null>(null)
+
+async function onStatusChange(event: RegistryEvent, e: Event) {
+  const status = (e.target as HTMLSelectElement).value as RegistryStatus
+  if (status === event.status) return
+  changingId.value = event.event_id
+  error.value = ''
+  try {
+    await postRegistryApply({
+      event_id: event.event_id,
+      suggested_status: status,
+    })
+    window.dispatchEvent(new CustomEvent('mi-registry-changed'))
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '상태 변경 실패'
+    await load() // 실패 시 표시 원복
+  } finally {
+    changingId.value = null
+  }
 }
 
 async function load() {
@@ -159,9 +184,18 @@ onMounted(load)
     <ul v-if="registry" class="list">
       <li v-for="event in registry.events" :key="event.event_id" class="card">
         <div class="card-head">
-          <span class="status" :class="event.status.toLowerCase()">
-            {{ STATUS_LABELS[event.status] }}
-          </span>
+          <select
+            class="status status-select"
+            :class="event.status.toLowerCase()"
+            :value="event.status"
+            :disabled="changingId === event.event_id"
+            title="상태 수동 변경 (즉시 레지스트리에 반영)"
+            @change="onStatusChange(event, $event)"
+          >
+            <option v-for="s in STATUS_OPTIONS" :key="s" :value="s">
+              {{ STATUS_LABELS[s] }}
+            </option>
+          </select>
           <span v-if="event.reactivated" class="reactivated">재활성화</span>
           <span class="severity">{{ event.severity }}</span>
           <span class="id">{{ event.event_id }}</span>
@@ -256,6 +290,15 @@ onMounted(load)
   font-weight: 700;
   padding: 1px 8px;
   border-radius: 999px;
+}
+.status-select {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.status-select:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 .status.active {
   background: rgba(16, 185, 129, 0.14);
