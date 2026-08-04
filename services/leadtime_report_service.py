@@ -2,8 +2,9 @@
 
 L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 definitions를 함께 수정):
 - 집계 대상: cargo_type3 == 'FCL' 인 행만 (컨테이너 전적 — LCL 등 제외)
-  + 운송모드 해상(trpr_mode == '100')만 — 육상(200)·항공(300) 추정 코드 제외.
-    모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함한다.
+  + 해상(sea) 그룹은 운송모드 해상(trpr_mode == '100')만 — 육상(200)·
+    Rail+Truck(300) 등 제외. 모드 미기재는 FCL이므로 해상으로 간주해 포함.
+    내륙(inland) 그룹은 row_groups의 trpr_mode 코드가 자체 판별한다.
 - 월 그룹핑(해상): onboard_date의 월 (없으면 atd의 월)
 - 실적(actual) 해상 L/T: ata - onboard_date (onboard_date 없으면 ata - atd), 일 단위
   * 완료 운송(ata 존재)만 집계. onboard 월 기준으로 귀속.
@@ -25,7 +26,7 @@ L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 defin
 - metric: sea(기본) | inland
 - countries / country_labels: 국가 행 구성과 라벨 재정의 (기본 KR/CN/JP)
 - row_groups: 국가 대신 커스텀 행 구분 (예: 선적구분, 출발항만, 운송방식)
-  [{"row_id", "label", "field": dprt|arvl, "codes": [...]}]
+  [{"row_id", "label", "field": 임의 bl_info 컬럼(dprt/arvl/trpr_mode 등), "codes": [...]}]
 """
 from __future__ import annotations
 
@@ -88,7 +89,7 @@ MONTH_LABELS = [
 DEFINITIONS = {
     "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T",
     "scope": "집계 대상: cargo_type3 == 'FCL' (컨테이너 전적) 운송만",
-    "sea_mode": "운송모드 해상(trpr_mode 100)만 집계 — 육상·항공 제외 (모드 미기재는 FCL 기준 해상 간주)",
+    "sea_mode": "해상 표는 운송모드 해상(trpr_mode 100)만 집계 — 육상(200)·Rail+Truck(300) 등 제외 (모드 미기재는 FCL 기준 해상 간주)",
     "fixed_rows": "'고정값' 표시 행은 실데이터 집계가 아닌 사용자 제공 고정값 (훼리 등 spot성 구간)",
     "actual_lt": "실적 해상 L/T = ata - onboard_date (onboard_date 없으면 atd), 일 단위",
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
@@ -272,23 +273,23 @@ def compute_leadtime_report(
             # FCL(컨테이너 전적)만 집계 대상
             if str(row.get("cargo_type3") or "").strip().upper() != "FCL":
                 continue
-            # 운송모드 해상(100)만 — 200/300 등 비해상 제외.
-            # 모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함.
-            mode = str(row.get("trpr_mode") or "").strip()
-            if mode and mode != "100":
-                continue
             matched = [g for g in groups if _matches_group(row, g)]
             if not matched:
                 continue
-
             onboard = _ts(row.get("onboard_date")) or _ts(row.get("atd"))
             ata = _ts(row.get("ata"))
             dprt = str(row.get("dprt") or "")
             arvl = str(row.get("arvl") or "")
+            mode = str(row.get("trpr_mode") or "").strip()
             country = _country_of(dprt)
 
             for group in matched:
                 metric = str(group.get("metric") or "sea")
+                # 해상 그룹은 해상모드(100)만 — 육상(200)·Rail+Truck(300) 등 제외.
+                # 모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함.
+                # 내륙 그룹은 row_groups의 trpr_mode 코드가 자체 판별하므로 게이트 없음.
+                if metric == "sea" and mode and mode != "100":
+                    continue
                 point = _lt_point(
                     row, onboard, ata, metric, actual_window, forecast_window,
                 )
@@ -298,12 +299,13 @@ def compute_leadtime_report(
 
                 row_groups = group.get("row_groups") or []
                 if row_groups:
-                    # 커스텀 행 구분 (선적구분/출발항만/운송방식 등)
+                    # 커스텀 행 구분 (선적구분/출발항만/운송방식 등) —
+                    # field는 임의 bl_info 컬럼 (dprt, arvl, trpr_mode 등)
                     row_keys = [
                         rg["row_id"]
                         for rg in row_groups
                         if _code_match(
-                            dprt if rg.get("field", "dprt") == "dprt" else arvl,
+                            str(row.get(rg.get("field", "dprt")) or ""),
                             rg.get("codes", []),
                         )
                     ]

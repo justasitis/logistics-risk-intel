@@ -978,18 +978,24 @@ ROUTE_MASTER_ALLOWED_DIMS = {
     "lsp_nm",
     "bsns_ccd_nm",
     "trpr_mode",
-    "to_stlc_cd",
-    "to_stlc_nm",
+    "dprt_pair",
+    "to_stlc_pair",
 }
-ROUTE_MASTER_REQUIRED_COLUMNS = [
-    "dprt", "dprt_nm", "arvl", "arvl_nm", "to_stlc_cd", "to_stlc_nm",
-]
+# 쌍 묶음 구분조건 — 하나의 체크로 코드+이름 열을 동시에 그룹핑/표시한다.
+ROUTE_MASTER_PAIR_DIMS = {
+    "dprt_pair": ["dprt", "dprt_nm"],
+    "to_stlc_pair": ["to_stlc_cd", "to_stlc_nm"],
+}
+# 항상 포함되는 기본 열 (도착지). 출발지/최종사이트는 구분조건 선택 시에만
+# 그룹핑·표시되므로 미선택 시 해당 열 없이 재집계된다.
+ROUTE_MASTER_BASE_COLUMNS = ["arvl", "arvl_nm"]
 ROUTE_MASTER_MAX_ROWS = 500
-# trpr_mode 코드 라벨 — 컬럼 딕셔너리에 코드 예시(100/300)만 있어 추정 매핑.
+# trpr_mode 코드 라벨 — 100 해상, 300 Rail+Truck (사용자 확인),
+# 200 육상(Direct Truck)은 추정. 항공 코드는 미확인.
 TRPR_MODE_LABELS = {
     "100": "해상",
     "200": "육상",
-    "300": "항공",
+    "300": "Rail+Truck",
 }
 # 경로 마스터 그룹화에 필요한 컬럼만 서버측 프로젝션 — 전체 88컬럼을
 # 받으면 5만 행 조회가 수백 MB가 되어 탭이 멈춘 것처럼 보인다.
@@ -1079,9 +1085,12 @@ def route_master(
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # dims가 필수 컬럼(to_stlc_cd 등)과 겹칠 수 있으므로 중복 제거
+    # 쌍 묶음 dims를 실제 컬럼으로 확장하고, 기본 열(도착지)과 합쳐 중복 제거
+    expanded_dims: list[str] = []
+    for dim in selected_dims:
+        expanded_dims.extend(ROUTE_MASTER_PAIR_DIMS.get(dim, [dim]))
     group_columns = list(dict.fromkeys(
-        selected_dims + ROUTE_MASTER_REQUIRED_COLUMNS
+        expanded_dims + ROUTE_MASTER_BASE_COLUMNS
     ))
     work = info_df.copy()
     for column in ["trpr_no", *group_columns]:

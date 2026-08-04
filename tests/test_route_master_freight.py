@@ -94,14 +94,35 @@ class TestRouteMaster:
         first, second = body["rows"]
         assert first["shipment_count"] == 2
         assert second["shipment_count"] == 1
-        # 필수 필드는 dims 없이도 항상 포함
-        for field in ("dprt", "dprt_nm", "arvl", "arvl_nm",
-                      "to_stlc_cd", "to_stlc_nm"):
-            assert field in first
-        assert first["dprt"] == "KRPUS"
+        # 기본 열(도착지)은 dims 없이도 항상 포함
+        assert first["arvl"] == "SIKOP"
+        assert "arvl_nm" in first
+        # 출발지/최종사이트는 쌍 dims 미선택 시 열 자체가 없다
+        for field in ("dprt", "dprt_nm", "to_stlc_cd", "to_stlc_nm"):
+            assert field not in first
         # dims 미선택 필드는 응답에 없다
         assert "cmpy_nm" not in first
         assert "trpr_mode" not in first
+
+    def test_pair_dims_group_and_show_columns(self, client, mock_bl_info):
+        """출발지/최종사이트 쌍 선택 시 해당 열 포함 + 그 단위로 재집계."""
+        mock_bl_info(_bl_info_df([
+            # 도착지는 같고 최종사이트만 다른 2건 — 쌍 미선택이면 1개로 합산
+            _info_row(trpr_no="TR1", to_stlc_cd="A1", to_stlc_nm="사이트A"),
+            _info_row(trpr_no="TR2", to_stlc_cd="B2", to_stlc_nm="사이트B"),
+        ]))
+        client_default = TestClient(app).get("/api/routes/master")
+        assert client_default.json()["total_rows"] == 1  # 합산됨
+
+        response = client.get(
+            "/api/routes/master",
+            params=[("dims", "dprt_pair"), ("dims", "to_stlc_pair")],
+        )
+        assert response.status_code == 200
+        rows = response.json()["rows"]
+        assert len(rows) == 2  # 최종사이트 단위로 분리 집계
+        assert rows[0]["dprt"] == "KRPUS"
+        assert rows[0]["to_stlc_cd"] in ("A1", "B2")
 
     def test_dims_included_and_trpr_mode_label(self, client, mock_bl_info):
         mock_bl_info(_bl_info_df([
@@ -119,17 +140,19 @@ class TestRouteMaster:
         assert labels["100"] == "해상"
         assert labels["999"] == "999"  # 미등록 코드는 코드 그대로
 
-    def test_to_stlc_dims_allowed_and_deduped(self, client, mock_bl_info):
-        """최종사이트 dims는 필수 컬럼과 겹쳐도 groupby 중복 없이 동작."""
+    def test_to_stlc_pair_dim_allowed_and_deduped(self, client, mock_bl_info):
+        """최종사이트 쌍 dims — 기본 열과 겹치지 않게 그룹핑."""
         mock_bl_info(_bl_info_df([_info_row(trpr_no="TR1")]))
         response = client.get(
             "/api/routes/master",
-            params=[("dims", "to_stlc_cd"), ("dims", "to_stlc_nm")],
+            params=[("dims", "to_stlc_pair")],
         )
         assert response.status_code == 200
         row = response.json()["rows"][0]
         assert row["to_stlc_cd"] == "SIKOP01"
         assert row["to_stlc_nm"] == "코페르 물류센터"
+        # 출발지 쌍은 미선택이라 없다
+        assert "dprt" not in row
 
     def test_company_filter_passed_as_cmpy_nm(self, client, mock_bl_info):
         mock_bl_info(_bl_info_df([_info_row()]))

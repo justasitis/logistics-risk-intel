@@ -9,18 +9,27 @@ const DIM_OPTIONS = [
   { key: 'lsp_nm', label: '물류사' },
   { key: 'bsns_ccd_nm', label: '사업구분' },
   { key: 'trpr_mode', label: '운송모드' },
-  { key: 'to_stlc_cd', label: '최종사이트코드' },
-  { key: 'to_stlc_nm', label: '최종사이트명' },
+  { key: 'dprt_pair', label: '출발지' },
+  { key: 'to_stlc_pair', label: '최종사이트' },
 ] as const
 
-const FIXED_COLUMNS = [
-  { key: 'dprt', label: '출발코드' },
-  { key: 'dprt_nm', label: '출발항' },
+// 쌍 묶음 구분조건 — 하나의 체크로 코드+이름 열을 동시에 그룹핑/표시
+const PAIR_DIM_COLUMNS: Record<string, Array<{ key: string; label: string }>> = {
+  dprt_pair: [
+    { key: 'dprt', label: '출발코드' },
+    { key: 'dprt_nm', label: '출발항' },
+  ],
+  to_stlc_pair: [
+    { key: 'to_stlc_cd', label: '최종사이트코드' },
+    { key: 'to_stlc_nm', label: '최종사이트명' },
+  ],
+}
+
+// 도착지는 항상 표시 (경로 마스터의 기본축)
+const BASE_COLUMNS = [
   { key: 'arvl', label: '도착코드' },
   { key: 'arvl_nm', label: '도착항' },
-  { key: 'to_stlc_cd', label: '최종사이트코드' },
-  { key: 'to_stlc_nm', label: '최종사이트명' },
-] as const
+]
 
 const COMPANY_OPTIONS = ['SKO', 'SKOH', 'SKBM', 'SKBA', 'SKOJ', 'SKOY']
 
@@ -85,19 +94,26 @@ function dimValue(row: RouteMasterRow, key: string): string {
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
 
-// ---------- 컬럼별 멀티선택 필터 ----------
-// dims로 선택된 열은 고정 열 표시에서 제외 (최종사이트코드/명 중복 방지)
-const visibleFixedColumns = computed(() =>
-  FIXED_COLUMNS.filter((c) => !selectedDims.value.includes(c.key)),
-)
+// 표시 열: 선택한 구분조건(쌍 묶음은 하위 열 확장) + 도착지 기본 열
+const visibleColumns = computed<Array<{ key: string; label: string }>>(() => {
+  const cols: Array<{ key: string; label: string }> = []
+  for (const dim of selectedDims.value) {
+    const pair = PAIR_DIM_COLUMNS[dim]
+    if (pair) {
+      cols.push(...pair)
+    } else {
+      cols.push({
+        key: dim,
+        label: DIM_OPTIONS.find((o) => o.key === dim)?.label ?? dim,
+      })
+    }
+  }
+  cols.push(...BASE_COLUMNS)
+  return cols
+})
 
-const filterColumns = computed(() => [
-  ...selectedDims.value.map((key) => ({
-    key,
-    label: DIM_OPTIONS.find((o) => o.key === key)?.label ?? key,
-  })),
-  ...visibleFixedColumns.value,
-])
+// ---------- 컬럼별 멀티선택 필터 ----------
+const filterColumns = visibleColumns
 
 function cellValue(row: RouteMasterRow, key: string): string {
   return dimValue(row, key)
@@ -139,18 +155,13 @@ const filteredRows = computed<RouteMasterRow[]>(() => {
 // ---------- 엑셀(CSV) 다운로드 — 현재 열 필터가 적용된 표시 행 기준 ----------
 function exportCsv() {
   if (!result.value) return
-  const dimCols = selectedDims.value.map((key) => ({
-    key,
-    label: DIM_OPTIONS.find((o) => o.key === key)?.label ?? key,
-  }))
-  const fixedCols = [...visibleFixedColumns.value]
+  const cols = visibleColumns.value
   const esc = (value: string) => `"${value.replace(/"/g, '""')}"`
-  const header = [...dimCols, ...fixedCols].map((c) => c.label).concat(['운송건수'])
+  const header = cols.map((c) => c.label).concat(['운송건수'])
   const lines = [header.map(esc).join(',')]
   for (const row of filteredRows.value) {
     const cells = [
-      ...dimCols.map((c) => dimValue(row, c.key)),
-      ...fixedCols.map((c) => dimValue(row, c.key)),
+      ...cols.map((c) => dimValue(row, c.key)),
       String(row.shipment_count),
     ]
     lines.push(cells.map(esc).join(','))
@@ -262,21 +273,17 @@ function exportCsv() {
         <table>
           <thead>
             <tr>
-              <th v-for="d in selectedDims" :key="d">
-                {{ DIM_OPTIONS.find((o) => o.key === d)?.label ?? d }}
-              </th>
-              <th v-for="c in visibleFixedColumns" :key="c.key">{{ c.label }}</th>
+              <th v-for="c in visibleColumns" :key="c.key">{{ c.label }}</th>
               <th class="num">운송건수</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(row, i) in filteredRows" :key="i">
-              <td v-for="d in selectedDims" :key="d">{{ dimValue(row, d) }}</td>
-              <td v-for="c in visibleFixedColumns" :key="c.key">{{ dimValue(row, c.key) }}</td>
+              <td v-for="c in visibleColumns" :key="c.key">{{ dimValue(row, c.key) }}</td>
               <td class="num">{{ row.shipment_count.toLocaleString() }}</td>
             </tr>
             <tr v-if="!filteredRows.length">
-              <td :colspan="selectedDims.length + visibleFixedColumns.length + 1" class="empty-cell">
+              <td :colspan="visibleColumns.length + 1" class="empty-cell">
                 열 필터 조건에 맞는 행이 없습니다.
               </td>
             </tr>

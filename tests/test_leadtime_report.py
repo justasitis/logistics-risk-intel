@@ -281,6 +281,32 @@ def test_real_config_loads_and_has_regions():
     assert {"유럽", "미주", "아시아"} <= regions
 
 
+def test_inland_row_groups_by_trpr_mode():
+    """유럽 내륙: trpr_mode별 운송방식 행 분리 — 해상(100) 게이트는 sea 그룹에만."""
+    groups = [{
+        "group_id": "EU_INLAND", "name": "유럽 내륙", "metric": "inland",
+        "arvl_codes": ["SIKOP"],
+        "row_groups": [
+            {"row_id": "DT", "label": "Direct Truck", "field": "trpr_mode", "codes": ["200"]},
+            {"row_id": "RT", "label": "Rail+Truck", "field": "trpr_mode", "codes": ["300"]},
+        ],
+    }]
+    df = pd.DataFrame([
+        _row(arvl="SIKOP", trpr_mode="300", onboard_date="2026-04-10",
+             ata="2026-05-10", dlvy_ata="2026-05-17"),   # Rail+Truck 7일
+        _row(arvl="SIKOP", trpr_mode="200", onboard_date="2026-04-10",
+             ata="2026-05-10", dlvy_ata="2026-05-12"),   # Direct Truck 2일
+        _row(arvl="SIKOP", trpr_mode="100", onboard_date="2026-04-10",
+             ata="2026-05-10", dlvy_ata="2026-05-30"),   # 해상모드 — 어느 행에도 미해당
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=groups)
+    rows = report["groups"][0]["rows"]
+    rt = next(r for r in rows if r["country"] == "RT" and r["stat"] == "Avg")
+    dt = next(r for r in rows if r["country"] == "DT" and r["stat"] == "Avg")
+    assert rt["cells"] == {"2026-05": 7.0}
+    assert dt["cells"] == {"2026-05": 2.0}
+
+
 # ---------- 고정 행(fixed rows) + dprt 매칭 ----------
 
 FERRY_GROUPS = GROUPS + [
