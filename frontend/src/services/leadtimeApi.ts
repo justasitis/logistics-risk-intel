@@ -1,4 +1,10 @@
-import type { InsightDraft, InsightDraftResponse, LeadtimeReport } from '../types/leadtime'
+import type {
+  InsightDraft,
+  InsightDraftResponse,
+  LeadtimeReport,
+  ReportSnapshot,
+  ReportSnapshotResponse,
+} from '../types/leadtime'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -24,6 +30,17 @@ export async function getLeadtimeReport(
     await fetch(
       `${API_BASE}/api/report/leadtime?months=${months}&forecast_months=${forecastMonths}`,
     ),
+  )
+}
+
+// 게시본(스냅샷) — 조회는 전원, 게시는 지정 사용자만(서버가 username 검사)
+export async function getReportSnapshot(): Promise<ReportSnapshotResponse> {
+  return parseResponse(await fetch(`${API_BASE}/api/report/snapshot`))
+}
+
+export async function publishReportSnapshot(): Promise<ReportSnapshot> {
+  return parseResponse(
+    await fetch(`${API_BASE}/api/report/snapshot/publish`, { method: 'POST' }),
   )
 }
 

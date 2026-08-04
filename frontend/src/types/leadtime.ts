@@ -61,3 +61,18 @@ export interface InsightDraftResponse {
   regenerated?: boolean
   revised_at?: string
 }
+
+// MI 리포트 게시본(스냅샷) — 지정 사용자만 SharePoint에 게시, 전원 열�
+export interface ReportSnapshot {
+  published_at: string
+  published_by: string
+  month: string
+  report: LeadtimeReport
+  insight: InsightDraftResponse | null
+}
+
+export interface ReportSnapshotResponse {
+  exists: boolean
+  can_publish: boolean
+  snapshot: ReportSnapshot | null
+}

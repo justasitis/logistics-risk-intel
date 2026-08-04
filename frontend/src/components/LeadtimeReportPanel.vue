@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import {
   deleteLeadtimeOverrides,
   getLeadtimeReport,
+  getReportSnapshot,
+  publishReportSnapshot,
   putLeadtimeOverrides,
 } from '../services/leadtimeApi'
 import { getMiRegistry, getRegistryMapZones } from '../services/miRegistryApi'
@@ -12,6 +14,7 @@ import type {
   LeadtimeGroup,
   LeadtimeReport,
   LeadtimeRow,
+  ReportSnapshot,
 } from '../types/leadtime'
 import type { RegistryEvent, RegistryStatus } from '../types/miRegistry'
 import FreightIndicesChart from './FreightIndicesChart.vue'
@@ -58,15 +61,50 @@ const editMode = ref(false)
 const editValues = ref<Record<string, string>>({})
 const savingCells = ref(false)
 
+// 게시본(스냅샷) — 지정 사용자만 갱신, 전원 열�
+const canPublish = ref(false)
+const publishedMeta = ref<{ at: string; by: string } | null>(null)
+const publishing = ref(false)
+
+function applySnapshot(snapshot: ReportSnapshot) {
+  report.value = snapshot.report
+  insight.value = snapshot.insight
+  publishedMeta.value = {
+    at: snapshot.published_at,
+    by: snapshot.published_by,
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
+    const snap = await getReportSnapshot()
+    canPublish.value = snap.can_publish
+    if (snap.exists && snap.snapshot) {
+      applySnapshot(snap.snapshot)
+      return
+    }
+    // 게시본이 아직 없으면 라이브 집계로 폴�
+    publishedMeta.value = null
     report.value = await getLeadtimeReport()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '리포트 조회 실패'
   } finally {
     loading.value = false
+  }
+}
+
+/** 게시본 갱신 — 라이브 재집계 후 SharePoint에 저장 (지정 사용자만) */
+async function publish() {
+  publishing.value = true
+  error.value = ''
+  try {
+    applySnapshot(await publishReportSnapshot())
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '게시본 갱신 실패'
+  } finally {
+    publishing.value = false
   }
 }
 
@@ -517,17 +555,33 @@ ${eventsHtml}
       </div>
       <div class="actions">
         <button class="btn" :disabled="loading || savingCells" @click="load">새로고침</button>
-        <button class="btn" :disabled="!report || savingCells" @click="editMode = !editMode">
+        <button
+          v-if="canPublish"
+          class="btn primary"
+          :disabled="publishing"
+          title="라이브로 재집계한 뒤 SharePoint 게시본으로 저장합니다"
+          @click="publish"
+        >
+          {{ publishing ? '재집계·저장 중... (수 분 소요 가능)' : '게시본 갱신' }}
+        </button>
+        <button v-if="canPublish" class="btn" :disabled="!report || savingCells" @click="editMode = !editMode">
           {{ editMode ? '편집 취소' : '셀 편집' }}
         </button>
-        <button v-if="editMode" class="btn primary" :disabled="savingCells" @click="saveCells">
+        <button v-if="canPublish && editMode" class="btn primary" :disabled="savingCells" @click="saveCells">
           {{ savingCells ? '저장 중...' : '편집값 저장' }}
         </button>
-        <button class="btn" :disabled="!report || savingCells" @click="resetCells">편집값 되돌리기</button>
+        <button v-if="canPublish" class="btn" :disabled="!report || savingCells" @click="resetCells">편집값 되돌리기</button>
         <button class="btn" :disabled="!report" @click="exportHtml">HTML 출력</button>
         <button class="btn" :disabled="!report" @click="doPrint">인쇄</button>
       </div>
     </section>
+
+    <p v-if="publishedMeta" class="publish-banner">
+      게시본 · {{ publishedMeta.at }} · {{ publishedMeta.by }} 게시
+    </p>
+    <p v-else-if="report && !loading" class="publish-banner live">
+      라이브 집계 — 저장된 게시본이 없습니다
+    </p>
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="loading" class="hint">집계 중...</p>
@@ -598,7 +652,7 @@ ${eventsHtml}
 
       <MiReportMap v-if="registryZones.length" ref="reportMap" :zones="registryZones" />
 
-      <MiInsightDraftPanel v-model:draft="insight" />
+      <MiInsightDraftPanel v-model:draft="insight" :can-edit="canPublish" />
 
       <FreightIndicesChart ref="freightChart" />
 
@@ -1097,6 +1151,22 @@ td.period {
   padding-left: 18px;
   font-size: 12px;
   color: var(--li-text-muted);
+}
+.publish-banner {
+  margin: 0;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--li-blue);
+  background: var(--li-surface-blue);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+.publish-banner.live {
+  color: var(--li-text-muted);
+  background: var(--li-bg-app-2);
+  border-color: var(--li-border);
 }
 .hint {
   color: var(--li-text-muted);

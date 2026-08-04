@@ -882,6 +882,96 @@ def leadtime_report(
 
  
 
+# ---------- MI 리포트 게시본(스냅샷) ----------
+# 지정 사용자만 SharePoint MI 폴터에 게시본을 저장하고,
+# 모든 사용자는 라이브 집계 대신 게시본을 열어 본다.
+REPORT_PUBLISH_USERS = {
+    u.strip().lower()
+    for u in os.environ.get(
+        "REPORT_PUBLISH_USERS", "so23132,so23364"
+    ).split(",")
+    if u.strip()
+}
+REPORT_SNAPSHOT_RELATIVE_PATH = _Path("MI") / "report_snapshot.json"
+
+
+def _report_snapshot_path() -> _Path:
+    from backend.app.core.marinesia_settings import get_marinesia_settings
+
+    return get_marinesia_settings().sharepoint_root / REPORT_SNAPSHOT_RELATIVE_PATH
+
+
+def _current_username_lower() -> str:
+    from backend.app.core.user_path import current_username
+
+    return current_username().strip().lower()
+
+
+@app.get("/api/report/snapshot")
+def get_report_snapshot() -> dict[str, Any]:
+    """게시본 조회 — 전 사용자 열람. can_publish로 갱신 권한 여부를 알린다."""
+    path = _report_snapshot_path()
+    snapshot = None
+    if path.exists():
+        try:
+            snapshot = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            snapshot = None
+    return {
+        "exists": snapshot is not None,
+        "can_publish": _current_username_lower() in REPORT_PUBLISH_USERS,
+        "snapshot": snapshot,
+    }
+
+
+@app.post("/api/report/snapshot/publish")
+def publish_report_snapshot() -> dict[str, Any]:
+    """게시본 갱신 — 지정 사용자만. 현재 리드타임 집계 + 인사이트 초안을 저장."""
+    username = _current_username_lower()
+    if username not in REPORT_PUBLISH_USERS:
+        raise HTTPException(
+            status_code=403, detail="게시 권한이 없는 사용자입니다."
+        )
+
+    from backend.app.services.insight_draft_store import InsightDraftStore
+    from services.leadtime_report_service import fetch_leadtime_report
+
+    # /api/report/leadtime 과 동일 파이프라인 (override 반영)
+    try:
+        report = _apply_leadtime_overrides(
+            fetch_leadtime_report(months=12, forecast_months=3)
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    month = date.today().isoformat()[:7]
+    insight = None
+    try:
+        insight = {**InsightDraftStore().load(month), "regenerated": False}
+    except Exception:
+        # 초안이 아직 없으면 리드타임만 게시한다.
+        insight = None
+
+    snapshot = {
+        "published_at": datetime.now().isoformat(timespec="seconds"),
+        "published_by": username,
+        "month": month,
+        "report": report,
+        "insight": insight,
+    }
+    # 파일 쓰기는 atomic (tmp → os.replace)
+    path = _report_snapshot_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(snapshot, ensure_ascii=False), encoding="utf-8",
+    )
+    os.replace(tmp, path)
+    return snapshot
+
+
+ 
+
 ROUTE_MASTER_ALLOWED_DIMS = {
     "cmpy_nm",
     "plnt_nm",

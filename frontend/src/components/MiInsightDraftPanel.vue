@@ -3,7 +3,10 @@ import { onMounted, ref, watch } from 'vue'
 import { getInsightDraft, postInsightDraft, putInsightDraft } from '../services/leadtimeApi'
 import type { InsightDraftResponse } from '../types/leadtime'
 
-const props = defineProps<{ draft: InsightDraftResponse | null }>()
+const props = withDefaults(
+  defineProps<{ draft: InsightDraftResponse | null; canEdit?: boolean }>(),
+  { canEdit: true },
+)
 const emit = defineEmits<{ 'update:draft': [value: InsightDraftResponse | null] }>()
 
 // 대상 월 기본값: 이번 달 (YYYY-MM)
@@ -13,11 +16,16 @@ const generating = ref(false)
 const saving = ref(false)
 const error = ref('')
 
-/** 저장된 초안 자동 복원 (탭 진입/월 변경 시, 없으면 조용히 비움) */
+/** 저장된 초안 자동 복원 (탭 진입/월 변경 시).
+ *  저장본이 없으면 표시 중인 초안이 이 달 것일 때 유지한다 (게시본 초안 보호). */
 async function restore() {
   try {
     const existing = await getInsightDraft(month.value)
-    emit('update:draft', existing)
+    if (existing) {
+      emit('update:draft', existing)
+    } else if (props.draft && props.draft.month !== month.value) {
+      emit('update:draft', null)
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '초안 복원 실패'
   }
@@ -69,16 +77,16 @@ async function save() {
       </div>
       <div class="controls">
         <input v-model="month" type="month" class="month-input" :disabled="generating || saving" />
-        <label class="chk">
+        <label v-if="canEdit" class="chk">
           <input v-model="includeLeadtime" type="checkbox" :disabled="generating || saving" />
           리드타임 포함
         </label>
-        <button class="btn primary" :disabled="generating || saving" @click="generate">
+        <button v-if="canEdit" class="btn primary" :disabled="generating || saving" @click="generate">
           {{ generating
             ? '초안 생성 중... (수 분 소요 가능)'
             : props.draft ? '재생성 (덮어쓰기)' : '인사이트 초안 생성' }}
         </button>
-        <button v-if="props.draft" class="btn" :disabled="generating || saving" @click="save">
+        <button v-if="canEdit && props.draft" class="btn" :disabled="generating || saving" @click="save">
           {{ saving ? '저장 중...' : '편집본 저장' }}
         </button>
       </div>
@@ -116,6 +124,7 @@ async function save() {
           v-model="section.body"
           rows="4"
           class="section-body"
+          :readonly="!canEdit"
         ></textarea>
       </div>
 
