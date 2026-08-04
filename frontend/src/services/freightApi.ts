@@ -33,8 +33,10 @@ export async function getRouteMaster(params: {
   etdTo?: string
 }): Promise<RouteMasterResponse> {
   const query = new URLSearchParams()
-  if (params.companies.length) query.set('companies', params.companies.join(','))
-  if (params.dims.length) query.set('dims', params.dims.join(','))
+  // FastAPI list[str] Query는 반복 파라미터 형식(?dims=a&dims=b)만 인식한다.
+  // 쉼표 결합 단일 값으로 병날 경우 "a,b" 전체가 하나의 값으로 파싱되어 422가 난다.
+  for (const c of params.companies) query.append('companies', c)
+  for (const d of params.dims) query.append('dims', d)
   // 백엔드가 from/to를 지원하면 사용, 미지원 시 etd_days로 폴�(기간 일수)
   if (params.etdFrom) query.set('etd_from', params.etdFrom)
   if (params.etdTo) query.set('etd_to', params.etdTo)
