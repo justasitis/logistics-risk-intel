@@ -2507,6 +2507,10 @@ onBeforeUnmount(() => {
 
             :class="{ active: activeWorkspace === 'inventory' }"
 
+            disabled
+
+            title="현재 사용하지 않는 탭입니다"
+
             @click="activeWorkspace = 'inventory'"
 
           >
@@ -3945,6 +3949,16 @@ onBeforeUnmount(() => {
   );
 
   box-shadow: 0 7px 16px rgba(37, 99, 235, 0.22);
+
+}
+
+
+
+.workspace-tab:disabled {
+
+  opacity: 0.45;
+
+  cursor: not-allowed;
 
 }
 
