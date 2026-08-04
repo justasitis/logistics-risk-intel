@@ -93,6 +93,60 @@ const charts = computed<WeekChart[]>(() => {
   return out
 })
 
+// ---------- 시황 수치 요약 (최신값 + MoM/YoY) ----------
+interface FreightStat {
+  key: string
+  label: string
+  latestDate: string
+  latestValue: number
+  mom: number | null // %
+  yoy: number | null // %
+}
+
+/** 기준일(daysBack 전) 이하의 가장 최근 포인트 대비 증감률(%) */
+function pctChange(pts: FreightPoint[], latest: FreightPoint, daysBack: number): number | null {
+  const target = new Date(`${latest.date}T00:00:00`)
+  target.setDate(target.getDate() - daysBack)
+  const targetIso = target.toISOString().slice(0, 10)
+  let ref: FreightPoint | null = null
+  for (const p of pts) {
+    if (p.date <= targetIso) ref = p
+    else break
+  }
+  if (!ref || ref.value === 0) return null
+  return Math.round(((latest.value - ref.value) / ref.value) * 1000) / 10
+}
+
+const stats = computed<FreightStat[]>(() => {
+  const out: FreightStat[] = []
+  for (const s of series.value ?? []) {
+    const pts = [...s.points].sort((a, b) => a.date.localeCompare(b.date))
+    const latest = pts[pts.length - 1]
+    if (!latest) continue
+    out.push({
+      key: s.key,
+      label: s.label,
+      latestDate: latest.date,
+      latestValue: latest.value,
+      mom: pctChange(pts, latest, 30),
+      yoy: pctChange(pts, latest, 365),
+    })
+  }
+  return out
+})
+
+function formatPct(value: number | null): string {
+  if (value === null) return '-'
+  if (value === 0) return '0%'
+  return `${value > 0 ? '▲' : '▼'}${Math.abs(value)}%`
+}
+
+/** 운임 상승 = 비용 증가(악화) → up, 하락 = down */
+function chipClass(value: number | null): string {
+  if (value === null || value === 0) return 'flat'
+  return value > 0 ? 'up' : 'down'
+}
+
 // ---------- 스케일 ----------
 const W = 460
 const H = 220
@@ -154,6 +208,7 @@ defineExpose({ getSvgHtml })
 <template>
   <section class="freight">
     <div class="freight-head">
+      <p class="eyebrow">MARKET WATCH</p>
       <h3 class="title">시황 (운임지수, USD/40' — 주차별 연도 비교)</h3>
     </div>
 
@@ -231,6 +286,18 @@ defineExpose({ getSvgHtml })
       </div>
     </div>
     <p v-else-if="series" class="hint">표시할 시리즈가 없습니다.</p>
+
+    <div v-if="stats.length" class="stat-grid">
+      <div v-for="s in stats" :key="s.key" class="stat-card">
+        <div class="stat-label">{{ s.label }}</div>
+        <div class="stat-value">{{ s.latestValue.toLocaleString() }}</div>
+        <div class="stat-date">{{ s.latestDate }} 기준</div>
+        <div class="stat-chips">
+          <span class="chip" :class="chipClass(s.mom)">MoM {{ formatPct(s.mom) }}</span>
+          <span class="chip" :class="chipClass(s.yoy)">YoY {{ formatPct(s.yoy) }}</span>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -238,13 +305,21 @@ defineExpose({ getSvgHtml })
 .freight {
   background: var(--li-surface-strong);
   border: 1px solid var(--li-border);
-  border-radius: var(--li-radius-md);
-  padding: 14px;
+  border-radius: var(--li-radius-lg);
+  padding: 16px 18px;
   box-shadow: var(--li-shadow-card);
 }
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--li-blue);
+}
 .title {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 800;
   color: var(--li-text);
 }
 .split {
@@ -333,5 +408,88 @@ defineExpose({ getSvgHtml })
   color: var(--li-risk-critical);
   margin: 0;
   font-size: 12px;
+}
+.stats {
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+.stats th,
+.stats td {
+  border: 1px solid var(--li-border-strong);
+  padding: 4px 8px;
+  text-align: center;
+  color: var(--li-text);
+}
+.stats th {
+  background: var(--li-bg-app-2);
+}
+.stats td.stat-label {
+  text-align: left;
+  font-weight: 700;
+}
+.stat-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 980px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.stat-card {
+  padding: 12px 14px;
+  border-radius: var(--li-radius-md);
+  background: var(--li-surface);
+  border: 1px solid var(--li-border);
+  box-shadow: var(--li-shadow-card);
+}
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--li-text-muted);
+}
+.stat-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--li-text);
+}
+.stat-date {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--li-text-faint);
+}
+.stat-chips {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.chip.up {
+  background: var(--li-risk-critical-bg);
+  color: var(--li-risk-critical);
+  border-color: var(--li-risk-critical-border);
+}
+.chip.down {
+  background: var(--li-risk-low-bg);
+  color: var(--li-risk-low);
+  border-color: var(--li-risk-low-border);
+}
+.chip.flat {
+  background: var(--li-bg-app-2);
+  color: var(--li-text-muted);
+  border-color: var(--li-border);
 }
 </style>

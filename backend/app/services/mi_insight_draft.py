@@ -46,6 +46,8 @@ class InsightSection(BaseModel):
 
 
 class InsightDraft(BaseModel):
+    # key_changes: 참고 리포트의 "핵심변화 1~3" Executive Summary에 해당
+    key_changes: list[str] = Field(default_factory=list)
     sections: list[InsightSection] = Field(default_factory=list)
     monitoring_points: list[str] = Field(default_factory=list)
     disclaimer: str = ""
@@ -259,7 +261,7 @@ def generate_insight_draft(
 
 def save_revised_draft(month: str, draft: dict[str, Any]) -> dict[str, Any]:
     """편집본 저장 (PUT) — 스키마 검증 후 revised_at 갱신."""
-    allowed = {"sections", "monitoring_points", "disclaimer"}
+    allowed = {"key_changes", "sections", "monitoring_points", "disclaimer"}
     unknown = set(draft) - allowed
     if unknown:
         raise ValueError(f"초안에 허용되지 않는 필드: {', '.join(sorted(unknown))}")

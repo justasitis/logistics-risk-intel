@@ -39,6 +39,7 @@ export interface InsightSection {
 }
 
 export interface InsightDraft {
+  key_changes: string[]
   sections: InsightSection[]
   monitoring_points: string[]
   disclaimer: string

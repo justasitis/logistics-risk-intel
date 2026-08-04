@@ -61,9 +61,12 @@ async function save() {
 </script>
 
 <template>
-  <section class="insight">
+  <section class="insight panel">
     <div class="insight-head">
-      <h3 class="insight-title">월간 인사이트 초안 (AI 생성 → 검토용)</h3>
+      <div>
+        <p class="eyebrow">AI INSIGHT DRAFT</p>
+        <h3 class="panel-title">월간 인사이트 초안</h3>
+      </div>
       <div class="controls">
         <input v-model="month" type="month" class="month-input" :disabled="generating || saving" />
         <label class="chk">
@@ -93,6 +96,20 @@ async function save() {
         <span v-if="props.draft.revised_at">· 편집 저장 {{ props.draft.revised_at }}</span>
       </p>
 
+      <div v-if="props.draft.draft.key_changes?.length" class="kc-block">
+        <h4 class="block-title">핵심 변화 (Executive Summary)</h4>
+        <div class="kc-grid">
+          <div
+            v-for="(change, i) in props.draft.draft.key_changes"
+            :key="i"
+            class="kc-card"
+          >
+            <span class="kc-num">{{ i + 1 }}</span>
+            <span class="kc-text">{{ change }}</span>
+          </div>
+        </div>
+      </div>
+
       <div v-for="section in props.draft.draft.sections" :key="section.key" class="section-card">
         <h4 class="section-title">{{ section.title }}</h4>
         <textarea
@@ -103,7 +120,7 @@ async function save() {
       </div>
 
       <div v-if="props.draft.draft.monitoring_points.length" class="section-card">
-        <h4 class="section-title">모니터링 포인트</h4>
+        <h4 class="section-title">익월 체크 포인트</h4>
         <ul class="points">
           <li v-for="(point, i) in props.draft.draft.monitoring_points" :key="i">{{ point }}</li>
         </ul>
@@ -118,26 +135,34 @@ async function save() {
 </template>
 
 <style scoped>
-.insight {
+.panel {
   background: var(--li-surface-strong);
   border: 1px solid var(--li-border);
-  border-radius: var(--li-radius-md);
-  padding: 14px;
+  border-radius: var(--li-radius-lg);
+  padding: 16px 18px;
   box-shadow: var(--li-shadow-card);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .insight-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
 }
-.insight-title {
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--li-blue);
+}
+.panel-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 800;
   color: var(--li-text);
 }
 .controls {
@@ -147,7 +172,7 @@ async function save() {
   flex-wrap: wrap;
 }
 .month-input {
-  padding: 5px 8px;
+  padding: 6px 10px;
   border: 1px solid var(--li-border);
   border-radius: var(--li-radius-sm);
   background: var(--li-surface-strong);
@@ -162,18 +187,25 @@ async function save() {
   color: var(--li-text-muted);
 }
 .btn {
-  padding: 6px 14px;
+  padding: 7px 14px;
   border: 1px solid var(--li-border);
   border-radius: 999px;
   background: var(--li-surface-strong);
   color: var(--li-text);
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--li-shadow-card);
 }
 .btn.primary {
-  background: var(--li-blue);
+  background: var(--li-accent-gradient);
   border-color: transparent;
   color: #fff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
 }
 .btn:disabled {
   opacity: 0.6;
@@ -181,25 +213,82 @@ async function save() {
 }
 .materials {
   margin: 0;
-  font-size: 12px;
-  color: var(--li-text-muted);
+  font-size: 11px;
+  color: var(--li-text-faint);
 }
+
+/* ---------- 핵심 변화 카드 ---------- */
+.kc-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.block-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--li-text-soft);
+}
+.kc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 980px) {
+  .kc-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.kc-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--li-radius-md);
+  background: var(--li-accent-gradient-soft), var(--li-surface);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  box-shadow: var(--li-shadow-card);
+}
+.kc-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--li-accent-gradient);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.28);
+}
+.kc-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--li-text);
+  font-weight: 600;
+}
+
+/* ---------- 섹션 ---------- */
 .section-card {
   border-top: 1px solid var(--li-border);
-  padding-top: 8px;
+  padding-top: 10px;
 }
 .section-title {
   margin: 0 0 6px;
   font-size: 12px;
+  font-weight: 800;
   color: var(--li-text-soft);
+  border-left: 3px solid var(--li-blue);
+  padding-left: 8px;
 }
 .section-body {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--li-border);
   border-radius: var(--li-radius-sm);
   font-size: 12px;
+  line-height: 1.6;
   color: var(--li-text);
   background: var(--li-surface);
   resize: vertical;
@@ -209,11 +298,20 @@ async function save() {
   padding-left: 18px;
   font-size: 12px;
   color: var(--li-text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .hitl {
   margin: 0;
-  font-size: 12px;
-  color: var(--li-risk-high);
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(180, 83, 9, 0.28);
+  border-radius: 999px;
+  padding: 4px 12px;
 }
 .hint {
   color: var(--li-text-muted);

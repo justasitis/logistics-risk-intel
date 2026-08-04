@@ -92,12 +92,22 @@ def _set_actify_env(monkeypatch):
 
 VALID_ANSWER = json.dumps(
     {
+        "key_changes": ["핵심변화1", "핵심변화2"],
         "sections": [
             {"key": "sea_europe", "title": "유럽 권역 동향", "body": "본문"},
             {"key": "key_events", "title": "주요 이벤트", "body": "본문2"},
         ],
         "monitoring_points": ["홍해 동향"],
         "disclaimer": "검토용 초안입니다.",
+    }
+)
+
+# key_changes 없는 구형 응답도 하위호환으로 받아들인다 (기본값 빈 리스트)
+LEGACY_ANSWER = json.dumps(
+    {
+        "sections": [{"key": "k", "title": "t", "body": "b"}],
+        "monitoring_points": [],
+        "disclaimer": "d",
     }
 )
 
@@ -118,9 +128,26 @@ def test_generate_draft_success(run_store, monkeypatch):
     result = svc.generate_insight_draft(month="2026-07", include_leadtime=True)
     assert result["month"] == "2026-07"
     assert len(result["draft"]["sections"]) == 2
+    assert result["draft"]["key_changes"] == ["핵심변화1", "핵심변화2"]
     assert result["draft"]["monitoring_points"] == ["홍해 동향"]
     summary = result["materials_summary"]
     assert summary == {"events_used": 2, "leadtime_used": True, "summary_used": True}
+
+
+def test_generate_draft_legacy_response_without_key_changes(run_store, monkeypatch):
+    """key_changes가 없는 구형 Actify 응답도 빈 리스트로 하위호환 처리."""
+    _set_actify_env(monkeypatch)
+    monkeypatch.setattr(svc, "collect_leadtime_highlights", lambda month: None)
+    monkeypatch.setattr(svc, "collect_schedule_summary", lambda: None)
+    monkeypatch.setattr(
+        svc.ActifyClient,
+        "call",
+        lambda self, prompt, conversation_id="": type(
+            "R", (), {"answer": LEGACY_ANSWER, "conversation_id": ""}
+        )(),
+    )
+    result = svc.generate_insight_draft(month="2026-07", include_leadtime=False)
+    assert result["draft"]["key_changes"] == []
 
 
 def test_generate_draft_not_configured(monkeypatch):

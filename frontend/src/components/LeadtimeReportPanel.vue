@@ -1,25 +1,57 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   deleteLeadtimeOverrides,
   getLeadtimeReport,
   putLeadtimeOverrides,
 } from '../services/leadtimeApi'
+import { getMiRegistry, getRegistryMapZones } from '../services/miRegistryApi'
+import type { RegistryMapZone } from '../services/miUpload'
 import type {
   InsightDraftResponse,
   LeadtimeGroup,
   LeadtimeReport,
   LeadtimeRow,
 } from '../types/leadtime'
+import type { RegistryEvent, RegistryStatus } from '../types/miRegistry'
 import FreightIndicesChart from './FreightIndicesChart.vue'
 import MiInsightDraftPanel from './MiInsightDraftPanel.vue'
+import MiReportMap from './MiReportMap.vue'
 
 const freightChart = ref<InstanceType<typeof FreightIndicesChart> | null>(null)
+const reportMap = ref<InstanceType<typeof MiReportMap> | null>(null)
 
 const report = ref<LeadtimeReport | null>(null)
 const insight = ref<InsightDraftResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
+
+// MI 이벤트 레지스트리 (리드타임 원인 참고 표)
+const registryEvents = ref<RegistryEvent[]>([])
+// 레지스트리 영향권 (리포트 지도 표시용)
+const registryZones = ref<RegistryMapZone[]>([])
+
+const STATUS_LABELS: Record<RegistryStatus, string> = {
+  ACTIVE: '진행 중',
+  IMPROVING: '완화',
+  RESOLVED: '해소',
+}
+const STATUS_ORDER: Record<RegistryStatus, number> = {
+  ACTIVE: 0,
+  IMPROVING: 1,
+  RESOLVED: 2,
+}
+
+function statusLabel(status: RegistryStatus): string {
+  return STATUS_LABELS[status] ?? status
+}
+
+const sortedRegistryEvents = computed<RegistryEvent[]>(() =>
+  [...registryEvents.value].sort((a, b) => {
+    const byStatus = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
+    return byStatus !== 0 ? byStatus : b.last_seen.localeCompare(a.last_seen)
+  }),
+)
 
 // 셀 수동 편집 (서버 override 파일에 명시 저장)
 const editMode = ref(false)
@@ -38,7 +70,22 @@ async function load() {
   }
 }
 
+async function loadRegistry() {
+  try {
+    const res = await getMiRegistry()
+    registryEvents.value = res.events
+  } catch {
+    registryEvents.value = []
+  }
+  try {
+    registryZones.value = await getRegistryMapZones()
+  } catch {
+    registryZones.value = []
+  }
+}
+
 onMounted(load)
+onMounted(loadRegistry)
 
 function cellKey(groupId: string, country: string, stat: string, month: string): string {
   return `${groupId}|${country}|${stat}|${month}`
@@ -120,6 +167,122 @@ function rowCellText(row: LeadtimeRow | undefined, month: string): string {
   return value === undefined ? '' : String(value)
 }
 
+/** 전월 대비 증감 — 같은 행에서 현재 월 이전에 값이 있는 가장 가까운 월과 비교 */
+function cellDelta(row: LeadtimeRow | undefined, monthKey: string): number | null {
+  if (!row || !report.value) return null
+  const current = row.cells[monthKey]
+  if (current === undefined || current === null) return null
+  const cols = report.value.month_columns
+  const idx = cols.findIndex((c) => c.key === monthKey)
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    const prevCol = cols[i]
+    if (!prevCol) continue
+    const prev = row.cells[prevCol.key]
+    if (prev !== undefined && prev !== null) {
+      const delta = Math.round((current - prev) * 10) / 10
+      return delta === 0 ? null : delta
+    }
+  }
+  return null
+}
+
+function formatDelta(delta: number | null): string {
+  if (delta === null) return ''
+  return `${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}`
+}
+
+interface MomHighlight {
+  label: string
+  value: number
+  delta: number
+}
+
+/** 최신 실적 월 기준 전월 대비 변동 상위 3개 항로 (Avg 행만, 고정 행 제외) */
+const momHighlights = computed<MomHighlight[]>(() => {
+  const r = report.value
+  if (!r) return []
+  const actualCols = r.month_columns.filter((c) => c.kind === 'actual')
+  const latestCol = actualCols[actualCols.length - 1]
+  if (!latestCol) return []
+  const latest = latestCol.key
+  const highlights: MomHighlight[] = []
+  for (const group of r.groups) {
+    for (const block of countryBlocks(group)) {
+      if (block.fixed) continue
+      const row = block.rowsByStat.Avg
+      const current = row?.cells[latest]
+      if (current === undefined || current === null) continue
+      const delta = cellDelta(row, latest)
+      if (delta === null) continue
+      highlights.push({
+        label: `${group.name} · ${block.label}`,
+        value: current,
+        delta,
+      })
+    }
+  }
+  return highlights
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 3)
+})
+
+const highlightMonthLabel = computed<string>(() => {
+  const r = report.value
+  if (!r) return ''
+  const actualCols = r.month_columns.filter((c) => c.kind === 'actual')
+  return actualCols[actualCols.length - 1]?.label ?? ''
+})
+
+// ---------- KPI 요약 카드 ----------
+interface KpiSummary {
+  avgLt: number | null // 최신 실적 월 전 항로 평균 해상 L/T
+  avgDelta: number | null // 전월 대비 평균 변동 (행별 delta의 평균)
+  upCount: number
+  downCount: number
+  activeEvents: number
+  topChange: MomHighlight | null
+}
+
+const kpis = computed<KpiSummary>(() => {
+  const empty: KpiSummary = {
+    avgLt: null,
+    avgDelta: null,
+    upCount: 0,
+    downCount: 0,
+    activeEvents: registryEvents.value.filter((e) => e.status === 'ACTIVE').length,
+    topChange: null,
+  }
+  const r = report.value
+  if (!r) return empty
+  const actualCols = r.month_columns.filter((c) => c.kind === 'actual')
+  const latestCol = actualCols[actualCols.length - 1]
+  if (!latestCol) return empty
+  const latest = latestCol.key
+  const values: number[] = []
+  const deltas: number[] = []
+  for (const group of r.groups) {
+    for (const block of countryBlocks(group)) {
+      if (block.fixed) continue
+      const row = block.rowsByStat.Avg
+      const current = row?.cells[latest]
+      if (current === undefined || current === null) continue
+      values.push(current)
+      const delta = cellDelta(row, latest)
+      if (delta !== null) deltas.push(delta)
+    }
+  }
+  const mean = (xs: number[]) =>
+    xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null
+  return {
+    avgLt: mean(values),
+    avgDelta: deltas.length ? mean(deltas) : null,
+    upCount: deltas.filter((d) => d > 0).length,
+    downCount: deltas.filter((d) => d < 0).length,
+    activeEvents: empty.activeEvents,
+    topChange: momHighlights.value[0] ?? null,
+  }
+})
+
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -132,6 +295,7 @@ function doPrint() {
 function exportHtml() {
   if (!report.value) return
   const r = report.value
+  const k = kpis.value
   const sections = r.groups
     .map((g) => {
       const head = r.month_columns
@@ -140,16 +304,22 @@ function exportHtml() {
       const body = countryBlocks(g).map((block) => {
         const rows = STATS.map((stat, i) => {
           const cells = r.month_columns
-            .map((m) => `<td class="${m.kind}">${escapeHtml(rowCellText(block.rowsByStat[stat], m.key))}</td>`)
+            .map((m) => {
+              const d = cellDelta(block.rowsByStat[stat], m.key)
+              const deltaHtml = d === null
+                ? ''
+                : ` <span class="d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`
+              return `<td class="${m.kind}">${escapeHtml(rowCellText(block.rowsByStat[stat], m.key))}${deltaHtml}</td>`
+            })
             .join('')
           const labelCell = i === 0
-            ? `<td rowspan="3">${escapeHtml(block.label)}${block.fixed ? ' (고정값)' : ''}</td>`
+            ? `<td rowspan="3" class="country">${escapeHtml(block.label)}${block.fixed ? ' <span class="fixed-badge">고정값</span>' : ''}</td>`
             : ''
-          return `<tr>${labelCell}<td>${stat}</td>${cells}</tr>`
+          return `<tr>${labelCell}<td class="stat">${stat}</td>${cells}</tr>`
         })
         return rows.join('')
       }).join('')
-      return `<h2>${escapeHtml(g.name)}</h2><table><thead><tr><th>국가</th><th>구분</th>${head}</tr></thead><tbody>${body}</tbody></table>`
+      return `<div class="card group-card"><h2>${escapeHtml(g.name)}</h2><table><thead><tr><th>국가</th><th>구분</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
     })
     .join('')
   const defs = Object.values(r.definitions).map((d) => `<li>${escapeHtml(d)}</li>`).join('')
@@ -157,38 +327,131 @@ function exportHtml() {
     const draft = insight.value
     if (!draft) return ''
     const sectionsHtml = draft.draft.sections
-      .map((s) => `<h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.body)}</p>`)
+      .map((s) => `<div class="insight-section"><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.body)}</p></div>`)
       .join('')
+    const keyChanges = (draft.draft.key_changes ?? [])
+      .map((c, i) => `<div class="key-change"><span class="kc-num">${i + 1}</span><span>${escapeHtml(c)}</span></div>`)
+      .join('')
+    const keyChangesHtml = keyChanges
+      ? `<div class="card"><h2>핵심 변화 (Executive Summary)</h2><div class="kc-grid">${keyChanges}</div></div>`
+      : ''
     const points = draft.draft.monitoring_points
       .map((p) => `<li>${escapeHtml(p)}</li>`)
       .join('')
-    return `<h1>월간 인사이트 (${escapeHtml(draft.month)})</h1>
+    return `${keyChangesHtml}
+<div class="card"><h2>월간 인사이트 (${escapeHtml(draft.month)})</h2>
 <p class="meta">AI 생성 검토용 초안 · 생성 ${escapeHtml(draft.generated_at)}</p>
 ${sectionsHtml}
-<h2>모니터링 포인트</h2><ul>${points}</ul>
-<p class="meta">${escapeHtml(draft.draft.disclaimer)}</p>
-<hr>`
+<h3>익월 체크 포인트</h3><ul>${points}</ul>
+<p class="disclaimer">${escapeHtml(draft.draft.disclaimer)}</p></div>`
   })()
+  const highlightsHtml = momHighlights.value.length
+    ? `<div class="hl-grid">${momHighlights.value
+        .map((h) => `<div class="card hl-card ${h.delta > 0 ? 'hl-up' : 'hl-down'}">
+<div class="hl-label">${escapeHtml(h.label)}</div>
+<div class="hl-value">${h.value}<span class="hl-unit">일</span></div>
+<div class="hl-delta ${h.delta > 0 ? 'up' : 'down'}">전월 대비 ${h.delta > 0 ? '▲' : '▼'}${Math.abs(h.delta)}</div>
+</div>`)
+        .join('')}</div>`
+    : ''
+  const kpiHtml = `<div class="kpi-grid">
+<div class="card kpi kpi-blue"><div class="kpi-label">전 항로 평균 해상 L/T (${escapeHtml(highlightMonthLabel.value)})</div><div class="kpi-value">${k.avgLt ?? '-'}<span class="kpi-unit">일</span></div><div class="kpi-sub ${k.avgDelta === null ? '' : k.avgDelta > 0 ? 'up' : 'down'}">${k.avgDelta === null ? '' : `전월 대비 ${k.avgDelta > 0 ? '▲' : '▼'}${Math.abs(k.avgDelta)}`}</div></div>
+<div class="card kpi"><div class="kpi-label">최대 변동 항로</div><div class="kpi-value kpi-text">${k.topChange ? escapeHtml(k.topChange.label) : '-'}</div><div class="kpi-sub ${k.topChange && k.topChange.delta > 0 ? 'up' : 'down'}">${k.topChange ? `전월 대비 ${k.topChange.delta > 0 ? '▲' : '▼'}${Math.abs(k.topChange.delta)}` : ''}</div></div>
+<div class="card kpi"><div class="kpi-label">상승 / 하락 항로</div><div class="kpi-value">${k.upCount}<span class="kpi-unit">/ ${k.upCount + k.downCount}</span></div><div class="kpi-sub">리드타임 상승 항로 수</div></div>
+<div class="card kpi ${k.activeEvents > 0 ? 'kpi-warn' : ''}"><div class="kpi-label">진행 중 MI 이벤트</div><div class="kpi-value">${k.activeEvents}<span class="kpi-unit">건</span></div><div class="kpi-sub">이벤트 레지스트리 기준</div></div>
+</div>`
+  const eventsHtml = sortedRegistryEvents.value.length
+    ? `<div class="card"><h2>MI 이벤트 레지스트리 (리드타임 원인 참고)</h2><table><thead><tr><th>상태</th><th>심각도</th><th>헤드라인</th><th>지역/회랑</th><th>기간</th></tr></thead><tbody>${sortedRegistryEvents.value
+        .map((ev) => `<tr><td><span class="status-badge status-${ev.status.toLowerCase()}">${statusLabel(ev.status)}</span></td><td>${escapeHtml(ev.severity)}</td><td class="headline">${escapeHtml(ev.headline)}</td><td>${escapeHtml([...ev.locations, ...ev.corridors].join(', ') || '-')}</td><td>${escapeHtml(ev.first_seen)} ~ ${escapeHtml(ev.last_seen)}</td></tr>`)
+        .join('')}</tbody></table></div>`
+    : ''
   const html = `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><title>물류 MI Report — 항로별 리드타임</title>
 <style>
-body{font-family:'Malgun Gothic',sans-serif;margin:24px;color:#122033}
-h1{font-size:18px}h2{font-size:14px;margin-top:24px}
-table{border-collapse:collapse;font-size:12px;width:100%}
-th,td{border:1px solid #bcccdc;padding:5px 8px;text-align:center}
-th{background:#f0f4f8}td.forecast,th.forecast{background:#dbeafe}
-.meta{color:#607086;font-size:11px;margin:8px 0}
+body{font-family:'Malgun Gothic','Pretendard',sans-serif;margin:0;padding:32px;color:#122033;background:#f6f8fb}
+.report{max-width:1120px;margin:0 auto}
+.hero{background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 55%,#06b6d4 100%);border-radius:20px;padding:26px 30px;color:#fff;box-shadow:0 18px 44px rgba(15,32,54,.16)}
+.hero-eyebrow{margin:0 0 6px;font-size:11px;font-weight:800;letter-spacing:.14em;opacity:.85}
+.hero h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.hero .meta{color:rgba(255,255,255,.82);font-size:11px;margin:10px 0 0}
+h2{font-size:14px;margin:0 0 10px;color:#122033}
+h3{font-size:12px;margin:14px 0 6px;color:#344861}
+.card{background:rgba(255,255,255,.92);border:1px solid rgba(16,42,67,.11);border-radius:14px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,32,54,.08);margin-top:14px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+.kpi{margin-top:0;min-height:96px}
+.kpi-blue{background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(6,182,212,.16)),rgba(255,255,255,.92)}
+.kpi-warn{border-color:rgba(249,115,22,.34);background:rgba(249,115,22,.08)}
+.kpi-label{color:#607086;font-size:11px;font-weight:700}
+.kpi-value{margin-top:8px;font-size:28px;font-weight:800;letter-spacing:-.03em}
+.kpi-value.kpi-text{font-size:14px;line-height:1.4}
+.kpi-unit{font-size:12px;font-weight:600;color:#607086;margin-left:3px}
+.kpi-sub{margin-top:4px;font-size:11px;color:#8a98aa}
+.hl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.hl-card{margin-top:0}
+.hl-up{border-color:rgba(239,68,68,.34)}
+.hl-down{border-color:rgba(16,185,129,.31)}
+.hl-label{font-size:12px;color:#344861;font-weight:700}
+.hl-value{margin-top:8px;font-size:26px;font-weight:800}
+.hl-unit{font-size:12px;color:#607086;margin-left:2px}
+.hl-delta{margin-top:4px;font-size:12px;font-weight:700}
+.up{color:#ef4444}
+.down{color:#10b981}
+.d{font-size:11px;font-weight:700;margin-left:3px}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px;border:1px solid rgba(16,42,67,.11);border-radius:10px;overflow:hidden}
+th,td{border-bottom:1px solid rgba(16,42,67,.11);border-right:1px solid rgba(16,42,67,.08);padding:6px 8px;text-align:center}
+th{background:#eef3f8;color:#344861;font-size:11px;font-weight:800;letter-spacing:.03em}
+tr:last-child td{border-bottom:none}
+th:last-child,td:last-child{border-right:none}
+td.country{font-weight:700;background:#f6f8fb}
+td.stat{color:#607086;font-size:11px}
+td.forecast,th.forecast{background:rgba(219,234,254,.75);color:#2563eb;font-weight:700}
+.fixed-badge{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:999px;font-size:11px;background:rgba(249,115,22,.14);color:#f97316;border:1px solid rgba(249,115,22,.34)}
+.meta{color:#607086;font-size:11px;margin:4px 0 10px}
 ul{font-size:11px;color:#607086}
+.kc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.key-change{display:flex;gap:10px;align-items:flex-start;background:linear-gradient(135deg,rgba(37,99,235,.08),rgba(6,182,212,.10));border:1px solid rgba(37,99,235,.18);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5}
+.kc-num{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff;font-size:12px;font-weight:800}
+.insight-section{border-left:3px solid #2563eb;padding-left:12px;margin-top:12px}
+.insight-section h3{margin:0 0 4px}
+.insight-section p{margin:0;font-size:12px;line-height:1.6;color:#344861}
+.disclaimer{margin:12px 0 0;font-size:11px;color:#b45309;background:rgba(245,158,11,.12);border:1px solid rgba(180,83,9,.28);border-radius:999px;display:inline-block;padding:4px 12px}
+.status-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid transparent;white-space:nowrap}
+.status-active{background:rgba(249,115,22,.14);color:#f97316;border-color:rgba(249,115,22,.34)}
+.status-improving{background:rgba(6,182,212,.13);color:#06b6d4;border-color:rgba(6,182,212,.31)}
+.status-resolved{background:rgba(16,185,129,.13);color:#10b981;border-color:rgba(16,185,129,.31)}
+td.headline{text-align:left}
+.charts{display:flex;gap:16px;flex-wrap:wrap}
+.chart-box{flex:1;min-width:320px}
+.graticule line{stroke:rgba(37,99,235,.09);stroke-width:1}
+.land{fill:#c9dcec;stroke:rgba(255,255,255,.9);stroke-width:.6}
+.zone-fill{opacity:.16}
+.zone-ring{opacity:.85}
+.zone-label{font-size:12px;font-weight:700;fill:#344861;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px}
+.footer{margin:18px 0 0;color:#8a98aa;font-size:11px;text-align:center}
 </style></head><body>
+<div class="report">
+<div class="hero">
+<p class="hero-eyebrow">MONTHLY LOGISTICS MI REPORT</p>
 <h1>물류 MI Report — 항로별 리드타임</h1>
 <p class="meta">조회 시점 기준 자동 집계 · 출처: ${escapeHtml(r.source)} · 생성: ${escapeHtml(r.generated_at)}</p>
+</div>
+${kpiHtml}
+${highlightsHtml ? `<div class="card" style="padding-bottom:6px"><h2>금월 핵심 변동 (${escapeHtml(highlightMonthLabel.value)} 기준 · 전월 대비)</h2></div>` : ''}
+${highlightsHtml}
 ${insightHtml}
 ${(() => {
+  const svg = reportMap.value?.getSvgHtml()
+  return svg ? `<div class="card"><h2>물류 이벤트 지도 (권역별 포커스)</h2>${svg}</div>` : ''
+})()}
+${(() => {
   const svg = freightChart.value?.getSvgHtml()
-  return svg ? `<h2>시황 (운임지수, USD/40')</h2>${svg}` : ''
+  return svg ? `<div class="card"><h2>시황 (운임지수, USD/40')</h2><div class="charts">${svg}</div></div>` : ''
 })()}
 ${sections}
-<h2>정의</h2><ul>${defs}</ul>
+${eventsHtml}
+<div class="card"><h2>정의</h2><ul>${defs}</ul></div>
+<p class="footer">SK온 Global물류팀 · Logistics Risk Intelligence — 본 리포트는 자동 집계 결과이며 최종 문서는 담당자가 확정합니다.</p>
+</div>
 </body></html>`
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -202,12 +465,22 @@ ${sections}
 
 <template>
   <div class="leadtime-report">
-    <div class="toolbar">
-      <div>
-        <h2 class="title">물류 MI Report — 항로별 리드타임</h2>
-        <p v-if="report" class="meta">
-          조회 시점 기준 자동 집계 · B-LAP 출처 · 생성 {{ report.generated_at }}
-        </p>
+    <section class="hero">
+      <div class="hero-left">
+        <div class="hero-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17l5-6 4 3 6-8" />
+            <path d="M18 6h3v3" />
+            <path d="M3 21h18" />
+          </svg>
+        </div>
+        <div>
+          <p class="eyebrow">MONTHLY LOGISTICS MI</p>
+          <h2 class="hero-title">물류 MI Report — 항로별 리드타임</h2>
+          <p v-if="report" class="hero-meta">
+            조회 시점 기준 자동 집계 · B-LAP 출처 · 생성 {{ report.generated_at }}
+          </p>
+        </div>
       </div>
       <div class="actions">
         <button class="btn" :disabled="loading || savingCells" @click="load">새로고침</button>
@@ -221,7 +494,7 @@ ${sections}
         <button class="btn" :disabled="!report" @click="exportHtml">HTML 출력</button>
         <button class="btn" :disabled="!report" @click="doPrint">인쇄</button>
       </div>
-    </div>
+    </section>
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="loading" class="hint">집계 중...</p>
@@ -230,60 +503,168 @@ ${sections}
     </p>
 
     <template v-if="report">
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-label">전 항로 평균 해상 L/T ({{ highlightMonthLabel }})</div>
+          <div class="kpi-value">
+            {{ kpis.avgLt ?? '-' }}<span class="kpi-unit">일</span>
+          </div>
+          <div
+            v-if="kpis.avgDelta !== null"
+            class="kpi-sub"
+            :class="kpis.avgDelta > 0 ? 'up' : 'down'"
+          >
+            전월 대비 {{ formatDelta(kpis.avgDelta) }}
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">최대 변동 항로</div>
+          <div class="kpi-value kpi-text">{{ kpis.topChange?.label ?? '-' }}</div>
+          <div
+            v-if="kpis.topChange"
+            class="kpi-sub"
+            :class="kpis.topChange.delta > 0 ? 'up' : 'down'"
+          >
+            전월 대비 {{ formatDelta(kpis.topChange.delta) }}
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">상승 / 하락 항로</div>
+          <div class="kpi-value">
+            {{ kpis.upCount }}<span class="kpi-unit">/ {{ kpis.upCount + kpis.downCount }}</span>
+          </div>
+          <div class="kpi-sub">리드타임 상승 항로 수 (전월 대비)</div>
+        </div>
+        <div class="kpi-card" :class="{ 'kpi-warn': kpis.activeEvents > 0 }">
+          <div class="kpi-label">진행 중 MI 이벤트</div>
+          <div class="kpi-value">{{ kpis.activeEvents }}<span class="kpi-unit">건</span></div>
+          <div class="kpi-sub">이벤트 레지스트리 기준</div>
+        </div>
+      </div>
+
+      <section v-if="momHighlights.length" class="panel">
+        <div class="panel-head">
+          <h3 class="panel-title">금월 핵심 변동</h3>
+          <span class="panel-meta">{{ highlightMonthLabel }} 기준 · 전월 대비 상위 3개 항로</span>
+        </div>
+        <div class="hl-grid">
+          <div
+            v-for="h in momHighlights"
+            :key="h.label"
+            class="hl-card"
+            :class="h.delta > 0 ? 'hl-up' : 'hl-down'"
+          >
+            <div class="hl-label">{{ h.label }}</div>
+            <div class="hl-value">{{ h.value }}<span class="hl-unit">일</span></div>
+            <div class="hl-delta" :class="h.delta > 0 ? 'up' : 'down'">
+              전월 대비 {{ formatDelta(h.delta) }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <MiReportMap v-if="registryZones.length" ref="reportMap" :zones="registryZones" />
+
       <MiInsightDraftPanel v-model:draft="insight" />
 
       <FreightIndicesChart ref="freightChart" />
 
-      <section v-for="group in report.groups" :key="group.group_id" class="group">
-        <h3 class="group-name">{{ group.name }}</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>국가</th>
-              <th>구분</th>
-              <th
-                v-for="m in report.month_columns"
-                :key="m.key"
-                :class="{ forecast: m.kind === 'forecast' }"
-              >
-                {{ m.label }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="block in countryBlocks(group)" :key="block.country">
-              <tr v-for="(stat, i) in STATS" :key="`${block.country}-${stat}`">
-                <td v-if="i === 0" :rowspan="3" class="country">
-                  {{ block.label }}
-                  <span v-if="block.fixed" class="fixed-badge" title="사용자 제공 고정값 (실데이터 집계 아님)">고정값</span>
-                </td>
-                <td class="stat">{{ stat }}</td>
-                <td
+      <section v-for="group in report.groups" :key="group.group_id" class="panel">
+        <div class="panel-head">
+          <h3 class="panel-title">{{ group.name }}</h3>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>국가</th>
+                <th>구분</th>
+                <th
                   v-for="m in report.month_columns"
                   :key="m.key"
-                  :class="{
-                    forecast: m.kind === 'forecast',
-                    edited: isEdited(cellKey(group.group_id, block.country, stat, m.key)),
-                  }"
+                  :class="{ forecast: m.kind === 'forecast' }"
                 >
-                  <input
-                    v-if="editMode"
-                    type="number"
-                    step="0.1"
-                    class="cell-input"
-                    :value="editValues[cellKey(group.group_id, block.country, stat, m.key)] ?? rowCellText(block.rowsByStat[stat], m.key)"
-                    @input="onCellInput(cellKey(group.group_id, block.country, stat, m.key), $event)"
-                  />
-                  <template v-else>{{ rowCellText(block.rowsByStat[stat], m.key) }}</template>
-                </td>
+                  {{ m.label }}
+                </th>
               </tr>
-            </template>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              <template v-for="block in countryBlocks(group)" :key="block.country">
+                <tr v-for="(stat, i) in STATS" :key="`${block.country}-${stat}`">
+                  <td v-if="i === 0" :rowspan="3" class="country">
+                    {{ block.label }}
+                    <span v-if="block.fixed" class="fixed-badge" title="사용자 제공 고정값 (실데이터 집계 아님)">고정값</span>
+                  </td>
+                  <td class="stat">{{ stat }}</td>
+                  <td
+                    v-for="m in report.month_columns"
+                    :key="m.key"
+                    :class="{
+                      forecast: m.kind === 'forecast',
+                      edited: isEdited(cellKey(group.group_id, block.country, stat, m.key)),
+                    }"
+                  >
+                    <input
+                      v-if="editMode"
+                      type="number"
+                      step="0.1"
+                      class="cell-input"
+                      :value="editValues[cellKey(group.group_id, block.country, stat, m.key)] ?? rowCellText(block.rowsByStat[stat], m.key)"
+                      @input="onCellInput(cellKey(group.group_id, block.country, stat, m.key), $event)"
+                    />
+                    <template v-else>
+                      <span class="cell-num">{{ rowCellText(block.rowsByStat[stat], m.key) }}</span>
+                      <span
+                        v-if="cellDelta(block.rowsByStat[stat], m.key) !== null"
+                        class="cell-delta"
+                        :class="(cellDelta(block.rowsByStat[stat], m.key) ?? 0) > 0 ? 'up' : 'down'"
+                      >{{ formatDelta(cellDelta(block.rowsByStat[stat], m.key)) }}</span>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </section>
 
-      <section class="definitions">
-        <h3 class="group-name">정의</h3>
+      <section v-if="sortedRegistryEvents.length" class="panel">
+        <div class="panel-head">
+          <h3 class="panel-title">MI 이벤트 레지스트리</h3>
+          <span class="panel-meta">리드타임 원인 참고 · 상태순 정렬</span>
+        </div>
+        <div class="table-wrap events-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>상태</th>
+                <th>심각도</th>
+                <th>헤드라인</th>
+                <th>지역/회랑</th>
+                <th>기간</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="ev in sortedRegistryEvents" :key="ev.event_id">
+                <td>
+                  <span class="status-badge" :class="ev.status.toLowerCase()">
+                    {{ statusLabel(ev.status) }}
+                  </span>
+                </td>
+                <td>{{ ev.severity }}</td>
+                <td class="headline">{{ ev.headline }}</td>
+                <td>{{ [...ev.locations, ...ev.corridors].join(', ') || '-' }}</td>
+                <td class="period">{{ ev.first_seen }} ~ {{ ev.last_seen }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel definitions">
+        <div class="panel-head">
+          <h3 class="panel-title">정의</h3>
+        </div>
         <ul>
           <li v-for="(text, key) in report.definitions" :key="key">{{ text }}</li>
         </ul>
@@ -294,56 +675,228 @@ ${sections}
 
 <style scoped>
 .leadtime-report {
-  max-width: 1100px;
+  max-width: 1160px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
-.toolbar {
+
+/* ---------- 히어로 ---------- */
+.hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  padding: 20px 22px;
+  border-radius: var(--li-radius-lg);
+  background: linear-gradient(135deg, #1e3a8a 0%, var(--li-blue) 55%, var(--li-cyan) 100%);
+  box-shadow: var(--li-shadow-float);
+  color: #fff;
 }
-.title {
+.hero-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.hero-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  flex-shrink: 0;
+}
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.85);
+}
+.hero-title {
   margin: 0;
-  font-size: 16px;
-  color: var(--li-text);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
 }
-.meta {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--li-text-muted);
+.hero-meta {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
 }
 .actions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .btn {
-  padding: 6px 14px;
-  border: 1px solid var(--li-border);
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 999px;
-  background: var(--li-surface-strong);
-  color: var(--li-text);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.group {
+.btn.primary {
+  background: #fff;
+  border-color: transparent;
+  color: var(--li-blue);
+}
+
+/* ---------- KPI 카드 ---------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 980px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.kpi-card {
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: var(--li-radius-md);
   background: var(--li-surface-strong);
   border: 1px solid var(--li-border);
-  border-radius: var(--li-radius-md);
-  padding: 14px;
   box-shadow: var(--li-shadow-card);
 }
-.group-name {
-  margin: 0 0 8px;
-  font-size: 13px;
+.kpi-blue {
+  background: var(--li-accent-gradient-soft), var(--li-surface-strong);
+  border-color: rgba(37, 99, 235, 0.22);
+}
+.kpi-warn {
+  border-color: var(--li-risk-high-border);
+  background: var(--li-risk-high-bg), var(--li-surface-strong);
+}
+.kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--li-text-muted);
+}
+.kpi-value {
+  margin-top: 8px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--li-text);
+}
+.kpi-value.kpi-text {
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+.kpi-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--li-text-muted);
+  margin-left: 3px;
+}
+.kpi-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--li-text-faint);
+  font-weight: 700;
+}
+
+/* ---------- 패널 공통 ---------- */
+.panel {
+  background: var(--li-surface-strong);
+  border: 1px solid var(--li-border);
+  border-radius: var(--li-radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--li-shadow-card);
+}
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.panel-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--li-text);
+}
+.panel-meta {
+  font-size: 11px;
+  color: var(--li-text-faint);
+}
+
+/* ---------- 핵심 변동 카드 ---------- */
+.hl-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 980px) {
+  .hl-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.hl-card {
+  padding: 14px 16px;
+  border-radius: var(--li-radius-md);
+  background: var(--li-surface);
+  border: 1px solid var(--li-border);
+  box-shadow: var(--li-shadow-card);
+}
+.hl-up {
+  border-color: var(--li-risk-critical-border);
+  box-shadow: 0 14px 30px rgba(239, 68, 68, 0.1);
+}
+.hl-down {
+  border-color: var(--li-risk-low-border);
+  box-shadow: 0 14px 30px rgba(16, 185, 129, 0.1);
+}
+.hl-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--li-text-soft);
+}
+.hl-value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--li-text);
+}
+.hl-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--li-text-muted);
+  margin-left: 2px;
+}
+.hl-delta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------- 테이블 ---------- */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--li-border);
+  border-radius: var(--li-radius-md);
 }
 table {
   width: 100%;
@@ -352,13 +905,25 @@ table {
 }
 th,
 td {
-  border: 1px solid var(--li-border-strong);
-  padding: 5px 8px;
+  padding: 6px 8px;
   text-align: center;
   color: var(--li-text);
+  border-bottom: 1px solid var(--li-border);
+  border-right: 1px solid var(--li-border);
+}
+tr:last-child td {
+  border-bottom: none;
+}
+th:last-child,
+td:last-child {
+  border-right: none;
 }
 th {
   background: var(--li-bg-app-2);
+  color: var(--li-text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 th.forecast,
 td.forecast {
@@ -370,6 +935,45 @@ td.edited {
   text-decoration: underline dotted var(--li-risk-high) 2px;
   text-underline-offset: 3px;
 }
+td.country {
+  font-weight: 700;
+  background: var(--li-bg-app-2);
+}
+td.stat {
+  color: var(--li-text-muted);
+  font-size: 11px;
+}
+.cell-num {
+  font-weight: 600;
+}
+.cell-delta {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.up {
+  color: var(--li-risk-critical);
+}
+.down {
+  color: var(--li-risk-low);
+}
+.cell-delta.up {
+  background: var(--li-risk-critical-bg);
+}
+.cell-delta.down {
+  background: var(--li-risk-low-bg);
+}
+.kpi-sub.up,
+.hl-delta.up {
+  color: var(--li-risk-critical);
+}
+.kpi-sub.down,
+.hl-delta.down {
+  color: var(--li-risk-low);
+}
 .cell-input {
   width: 64px;
   padding: 2px 4px;
@@ -380,27 +984,55 @@ td.edited {
   color: var(--li-text);
   background: var(--li-surface-strong);
 }
-.btn.primary {
-  background: var(--li-blue);
-  border-color: transparent;
-  color: #fff;
-}
-td.country {
-  font-weight: 700;
-  background: var(--li-bg-app-2);
-}
-
 .fixed-badge {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
   background: var(--li-risk-high-bg);
   color: var(--li-risk-high);
   border: 1px solid var(--li-risk-high-border);
 }
+
+/* ---------- 이벤트 ---------- */
+.events-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+}
+td.headline {
+  text-align: left;
+}
+td.period {
+  white-space: nowrap;
+  color: var(--li-text-muted);
+}
+.status-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.status-badge.active {
+  background: var(--li-risk-high-bg);
+  color: var(--li-risk-high);
+  border-color: var(--li-risk-high-border);
+}
+.status-badge.improving {
+  background: var(--li-risk-watch-bg);
+  color: var(--li-risk-watch);
+  border-color: var(--li-risk-watch-border);
+}
+.status-badge.resolved {
+  background: var(--li-risk-low-bg);
+  color: var(--li-risk-low);
+  border-color: var(--li-risk-low-border);
+}
+
+/* ---------- 정의/기타 ---------- */
 .definitions ul {
   margin: 0;
   padding-left: 18px;
@@ -432,7 +1064,7 @@ td.country {
     inset: 0 auto auto 0;
     width: 100%;
   }
-  .leadtime-report .toolbar .actions {
+  .leadtime-report .hero .actions {
     display: none;
   }
 }
