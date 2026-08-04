@@ -330,7 +330,8 @@ class TestHistoryChunkSizing:
         captured = {}
         _mock_get(monkeypatch, lambda params: captured.update(params) or {"elements": []})
         fetch_bl_info(etd_to=date(2026, 7, 15))
-        assert "etd < '2026-07-16'" in captured["$filter"]
+        # bl_info의 etd는 YYYYMMDDHHMMSS 14자리 문자열 — YYYYMMDD 접두 비교
+        assert "etd < '20260716'" in captured["$filter"]
 
     def test_etd_from_and_to_together(self, monkeypatch):
         captured = {}
@@ -338,8 +339,8 @@ class TestHistoryChunkSizing:
         fetch_bl_info(
             etd_from=date(2026, 7, 1), etd_to=date(2026, 7, 15),
         )
-        assert "etd >= '2026-07-01'" in captured["$filter"]
-        assert "etd < '2026-07-16'" in captured["$filter"]
+        assert "etd >= '20260701'" in captured["$filter"]
+        assert "etd < '20260716'" in captured["$filter"]
 
 
 class TestSelectColumnsProjection:

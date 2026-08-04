@@ -212,13 +212,17 @@ def fetch_bl_info(
     password: Optional[str] = None,
 ) -> pd.DataFrame:
     filters: list[str] = []
+    # bl_info 뷰의 etd 등 날짜 컬럼은 YYYYMMDDHHMMSS 14자리 문자열
+    # (컬럼 딕셔너리 확인). 'YYYY-MM-DD'로 비교하면 하이픈('-')이 숫자보다
+    # 코드가 낮아 하한(>=)은 항상 참(묵시적 묵과), 상한(<)은 항상 거짓(0건)이
+    # 되므로, 고정폭 문자열 비교가 성립하는 YYYYMMDD 접두 형식으로 건다.
     if etd_from:
-        filters.append(f"etd >= '{etd_from.strftime('%Y-%m-%d')}'")
+        filters.append(f"etd >= '{etd_from.strftime('%Y%m%d')}'")
     if etd_to:
         # etd_to 당일을 포함하기 위해 익일 미만으로 비교한다.
         filters.append(
             f"etd < "
-            f"'{(etd_to + timedelta(days=1)).strftime('%Y-%m-%d')}'"
+            f"'{(etd_to + timedelta(days=1)).strftime('%Y%m%d')}'"
         )
     if companies:
         expr = " or ".join(
