@@ -11,6 +11,9 @@ L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 defin
   * 도착 예정월(current_eta의 월) 열에 귀속
 - 총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T 이며, 본 집계는 해상 구간만 다룬다.
   (2단계 확장 포인트: cut-off = onboard - etd 계획 대비 보정, 내륙 = dlvy_ata - ata)
+- 아웃라이어 제외: 월별 버킷별로 IQR(사분위 범위) 방식 적용 — 머신러닝 전처리의
+  표준 기법. [Q1 - 1.5×IQR, Q3 + 1.5×IQR] 범위를 벗어나는 극단값만 제거하므로
+  미주 동안 55일처럼 정상적인 장기 L/T는 유지된다. 표본 4개 미만 버킷은 제거하지 않음.
 
 항로 그룹핑은 backend/app/data/leadtime_route_groups.json 설정으로 정의한다.
 """
@@ -69,6 +72,7 @@ DEFINITIONS = {
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
     "month_basis": "월 그룹핑 = onboard_date 월 (없으면 atd 월)",
     "source": "각 월의 SK 화물 On-board 선사·모선의 운송 소요 시간(B-LAP bl_info)",
+    "outlier": "아웃라이어 제외: 월별 항로 집계에서 IQR 방식(Q1-1.5×IQR ~ Q3+1.5×IQR)으로 극단값만 제거 (표본 4건 미만은 제거 안 함)",
 }
 
 
@@ -128,6 +132,33 @@ def _matches_group(row: dict[str, Any], group: dict[str, Any]) -> bool:
     if any(t in haystack for t in excluded):
         return False
     return any(t in haystack for t in tokens)
+
+
+def _percentile(sorted_values: list[float], p: float) -> float:
+    """선형 보간 백분위 (numpy 기본 방식과 동일). sorted_values는 정렬된 상태."""
+    n = len(sorted_values)
+    pos = (n - 1) * p
+    lo = int(pos)
+    hi = min(lo + 1, n - 1)
+    frac = pos - lo
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * frac
+
+
+def _iqr_filter(values: list[float]) -> list[float]:
+    """IQR(사분위 범위) 방식 아웃라이어 제거 — ML 전처리의 표준 기법.
+
+    [Q1 - 1.5×IQR, Q3 + 1.5×IQR] 범위를 벗어나는 값만 제거한다.
+    표본이 4개 미만이면 사분위가 불안정하므로 그대로 반환한다.
+    """
+    if len(values) < 4:
+        return values
+    s = sorted(values)
+    q1 = _percentile(s, 0.25)
+    q3 = _percentile(s, 0.75)
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return [v for v in values if lower <= v <= upper]
 
 
 def compute_leadtime_report(
@@ -205,6 +236,9 @@ def compute_leadtime_report(
                country: str, stat: str) -> dict[str, float]:
         out: dict[str, float] = {}
         for month, values in source.get(group_id, {}).get(country, {}).items():
+            values = _iqr_filter(values)
+            if not values:
+                continue
             if stat == "Avg":
                 out[month] = round(sum(values) / len(values), 1)
             elif stat == "Min":

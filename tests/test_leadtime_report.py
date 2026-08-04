@@ -139,6 +139,56 @@ def test_fcl_only_scope():
     assert report["definitions"]["scope"].startswith("집계 대상: cargo_type3 == 'FCL'")
 
 
+def test_outlier_excluded_by_iqr():
+    """IQR 방식: 극단값만 제거하고 정상 장기 L/T(미주 동안 55일 등)는 유지."""
+    # 정상 분포 5건(28~32일) + 극단값 1건(150일)
+    rows = [
+        _row(onboard_date="2026-05-01", ata="2026-05-29"),  # 28일
+        _row(onboard_date="2026-05-02", ata="2026-05-31"),  # 29일
+        _row(onboard_date="2026-05-03", ata="2026-06-02"),  # 30일
+        _row(onboard_date="2026-05-04", ata="2026-06-04"),  # 31일
+        _row(onboard_date="2026-05-05", ata="2026-06-06"),  # 32일
+        _row(onboard_date="2026-05-06", ata="2026-10-03"),  # 150일 극단값
+    ]
+    report = _report(pd.DataFrame(rows))
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 30.0  # 극단값 미반영
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 32.0
+
+    # 정상적인 장기 L/T(55일 안팎)는 아웃라이어가 아니므로 유지
+    long_rows = [
+        _row(onboard_date="2026-05-01", ata="2026-06-23"),  # 53일
+        _row(onboard_date="2026-05-02", ata="2026-06-25"),  # 54일
+        _row(onboard_date="2026-05-03", ata="2026-06-27"),  # 55일
+        _row(onboard_date="2026-05-04", ata="2026-06-28"),  # 55일
+        _row(onboard_date="2026-05-05", ata="2026-06-30"),  # 56일
+    ]
+    long_report = _report(pd.DataFrame(long_rows))
+    assert _cell(long_report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 54.6
+    assert _cell(long_report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 56.0
+
+    # 표본 4건 미만이면 제거하지 않음 (극단값 포함 그대로 집계)
+    few = [
+        _row(onboard_date="2026-05-01", ata="2026-05-31"),   # 30일
+        _row(onboard_date="2026-05-02", ata="2026-06-01"),   # 30일
+        _row(onboard_date="2026-05-03", ata="2026-09-30"),   # 150일
+    ]
+    few_report = _report(pd.DataFrame(few))
+    assert _cell(few_report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 150.0
+
+    # 예상(forecast) 버킷에도 동일하게 적용
+    fc_rows = [
+        _row(onboard_date="2026-07-01", ata=None, eta_date="2026-08-08"),   # 38일
+        _row(onboard_date="2026-07-02", ata=None, eta_date="2026-08-10"),   # 39일
+        _row(onboard_date="2026-07-03", ata=None, eta_date="2026-08-12"),   # 40일
+        _row(onboard_date="2026-07-04", ata=None, eta_date="2026-08-14"),   # 41일
+        _row(onboard_date="2026-07-05", ata=None, eta_date="2026-08-16"),   # 42일
+        _row(onboard_date="2026-07-06", ata=None, eta_date="2026-10-14"),   # 100일 극단값
+    ]
+    fc_report = _report(pd.DataFrame(fc_rows))
+    assert _cell(fc_report, "ADRIA_SUEZ", "KR", "Avg", "2026-08") == 40.0
+    assert "outlier" in fc_report["definitions"]
+
+
 # ---------- 고정 행(fixed rows) + dprt 매칭 ----------
 
 FERRY_GROUPS = GROUPS + [
