@@ -233,6 +233,32 @@ const highlightMonthLabel = computed<string>(() => {
   return actualCols[actualCols.length - 1]?.label ?? ''
 })
 
+// ---------- 권역(region) 섹션 ----------
+const REGION_ORDER = ['유럽', '미주', '아시아']
+
+interface RegionSection {
+  name: string
+  groups: LeadtimeGroup[]
+}
+
+const regionSections = computed<RegionSection[]>(() => {
+  const r = report.value
+  if (!r) return []
+  const byRegion = new Map<string, LeadtimeGroup[]>()
+  for (const group of r.groups) {
+    const region = group.region || '기타'
+    if (!byRegion.has(region)) byRegion.set(region, [])
+    byRegion.get(region)?.push(group)
+  }
+  return [...byRegion.entries()]
+    .sort((a, b) => {
+      const ia = REGION_ORDER.indexOf(a[0])
+      const ib = REGION_ORDER.indexOf(b[0])
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
+    .map(([name, groups]) => ({ name, groups }))
+})
+
 // ---------- KPI 요약 카드 ----------
 interface KpiSummary {
   avgLt: number | null // 최신 실적 월 전 항로 평균 해상 L/T
@@ -296,30 +322,35 @@ function exportHtml() {
   if (!report.value) return
   const r = report.value
   const k = kpis.value
-  const sections = r.groups
-    .map((g) => {
-      const head = r.month_columns
-        .map((m) => `<th class="${m.kind}">${m.label}</th>`)
-        .join('')
-      const body = countryBlocks(g).map((block) => {
-        const rows = STATS.map((stat, i) => {
-          const cells = r.month_columns
-            .map((m) => {
-              const d = cellDelta(block.rowsByStat[stat], m.key)
-              const deltaHtml = d === null
-                ? ''
-                : ` <span class="d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`
-              return `<td class="${m.kind}">${escapeHtml(rowCellText(block.rowsByStat[stat], m.key))}${deltaHtml}</td>`
-            })
+  const sections = regionSections.value
+    .map((section) => {
+      const groupsHtml = section.groups
+        .map((g) => {
+          const head = r.month_columns
+            .map((m) => `<th class="${m.kind}">${m.label}</th>`)
             .join('')
-          const labelCell = i === 0
-            ? `<td rowspan="3" class="country">${escapeHtml(block.label)}${block.fixed ? ' <span class="fixed-badge">고정값</span>' : ''}</td>`
-            : ''
-          return `<tr>${labelCell}<td class="stat">${stat}</td>${cells}</tr>`
+          const body = countryBlocks(g).map((block) => {
+            const rows = STATS.map((stat, i) => {
+              const cells = r.month_columns
+                .map((m) => {
+                  const d = cellDelta(block.rowsByStat[stat], m.key)
+                  const deltaHtml = d === null
+                    ? ''
+                    : ` <span class="d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`
+                  return `<td class="${m.kind}">${escapeHtml(rowCellText(block.rowsByStat[stat], m.key))}${deltaHtml}</td>`
+                })
+                .join('')
+              const labelCell = i === 0
+                ? `<td rowspan="3" class="country">${escapeHtml(block.label)}${block.fixed ? ' <span class="fixed-badge">고정값</span>' : ''}</td>`
+                : ''
+              return `<tr>${labelCell}<td class="stat">${stat}</td>${cells}</tr>`
+            })
+            return rows.join('')
+          }).join('')
+          return `<div class="card group-card"><h2>${escapeHtml(g.name)}</h2><table><thead><tr><th>${escapeHtml(g.row_label ?? '국가')}</th><th>구분</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
         })
-        return rows.join('')
-      }).join('')
-      return `<div class="card group-card"><h2>${escapeHtml(g.name)}</h2><table><thead><tr><th>국가</th><th>구분</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+        .join('')
+      return `<h2 class="region-title">${escapeHtml(section.name)} 권역</h2>${groupsHtml}`
     })
     .join('')
   const defs = Object.values(r.definitions).map((d) => `<li>${escapeHtml(d)}</li>`).join('')
@@ -423,11 +454,13 @@ td.headline{text-align:left}
 .charts{display:flex;gap:16px;flex-wrap:wrap}
 .chart-box{flex:1;min-width:320px}
 .graticule line{stroke:rgba(37,99,235,.09);stroke-width:1}
+.grid-line{stroke:rgba(16,42,67,.11);stroke-width:1;stroke-dasharray:3 4}
 .land{fill:#c9dcec;stroke:rgba(255,255,255,.9);stroke-width:.6}
 .zone-fill{opacity:.16}
 .zone-ring{opacity:.85}
 .zone-label{font-size:12px;font-weight:700;fill:#344861;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px}
 .footer{margin:18px 0 0;color:#8a98aa;font-size:11px;text-align:center}
+.region-title{font-size:16px;margin:26px 0 4px;color:#122033;border-left:4px solid #2563eb;padding-left:10px}
 </style></head><body>
 <div class="report">
 <div class="hero">
@@ -569,7 +602,13 @@ ${eventsHtml}
 
       <FreightIndicesChart ref="freightChart" />
 
-      <section v-for="group in report.groups" :key="group.group_id" class="panel">
+      <template v-for="section in regionSections" :key="section.name">
+        <div class="region-header">
+          <span class="region-name">{{ section.name }} 권역</span>
+          <span class="region-line"></span>
+        </div>
+
+        <section v-for="group in section.groups" :key="group.group_id" class="panel">
         <div class="panel-head">
           <h3 class="panel-title">{{ group.name }}</h3>
         </div>
@@ -577,7 +616,7 @@ ${eventsHtml}
           <table>
             <thead>
               <tr>
-                <th>국가</th>
+                <th>{{ group.row_label ?? '국가' }}</th>
                 <th>구분</th>
                 <th
                   v-for="m in report.month_columns"
@@ -626,7 +665,8 @@ ${eventsHtml}
             </tbody>
           </table>
         </div>
-      </section>
+        </section>
+      </template>
 
       <section v-if="sortedRegistryEvents.length" class="panel">
         <div class="panel-head">
@@ -817,6 +857,25 @@ ${eventsHtml}
 }
 
 /* ---------- 패널 공통 ---------- */
+.region-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.region-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--li-text);
+  letter-spacing: -0.01em;
+}
+.region-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--li-accent-gradient);
+  opacity: 0.35;
+}
 .panel {
   background: var(--li-surface-strong);
   border: 1px solid var(--li-border);

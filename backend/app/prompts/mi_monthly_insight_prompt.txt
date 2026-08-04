@@ -15,8 +15,10 @@
 3. 각 섹션 본문(body)은 한국어 2~5문장, 실무자 보고체(개조식 혼용 가능).
 4. key_changes는 그 달의 가장 중요한 변화 최대 3개를 한 문장씩 요약한 것으로,
    리포트 최상단 Executive Summary에 그대로 노출된다. 수치·회랑명 등 구체적 근거를 포함하십시오.
-5. monitoring_points는 다음 달 주시해야 할 항목 최대 5개.
-6. disclaimer는 "본 초안은 자동 생성된 검토용이며 최종 문서는 담당자가 확정합니다" 취지의 한 문장.
+5. 재료 중 항공(AIR) 관련 이벤트가 하나라도 있으면 sections에 "air_outlook" 섹션을
+   반드시 추가하십시오. 항공 관련 이벤트가 없으면 이 섹션은 생략합니다.
+6. monitoring_points는 다음 달 주시해야 할 항목 최대 5개.
+7. disclaimer는 "본 초안은 자동 생성된 검토용이며 최종 문서는 담당자가 확정합니다" 취지의 한 문장.
 
 ## 출력
 JSON만 반환하십시오.
@@ -27,7 +29,8 @@ JSON만 반환하십시오.
     {"key": "sea_europe", "title": "유럽 권역 동향", "body": "..."},
     {"key": "sea_americas", "title": "미주 권역 동향", "body": "..."},
     {"key": "key_events", "title": "주요 이벤트", "body": "..."},
-    {"key": "leadtime_trend", "title": "리드타임 동향", "body": "..."}
+    {"key": "leadtime_trend", "title": "리드타임 동향", "body": "..."},
+    {"key": "air_outlook", "title": "[항공] 향후 전망 및 특이사항", "body": "..."}
   ],
   "monitoring_points": ["...", "..."],
   "disclaimer": "..."

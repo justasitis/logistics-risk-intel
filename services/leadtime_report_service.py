@@ -2,20 +2,30 @@
 
 L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 definitions를 함께 수정):
 - 집계 대상: cargo_type3 == 'FCL' 인 행만 (컨테이너 전적 — LCL 등 제외)
-- 월 그룹핑: onboard_date의 월 (없으면 atd의 월)
+  + 운송모드 해상(trpr_mode == '100')만 — 육상(200)·항공(300) 추정 코드 제외.
+    모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함한다.
+- 월 그룹핑(해상): onboard_date의 월 (없으면 atd의 월)
 - 실적(actual) 해상 L/T: ata - onboard_date (onboard_date 없으면 ata - atd), 일 단위
   * 완료 운송(ata 존재)만 집계. onboard 월 기준으로 귀속.
 - 예상(forecast) 해상 L/T: 진행 중 운송(ata 없음)의 current_eta 기준
   * current_eta = eta_date 우선, 없으면 eta
   * L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)
   * 도착 예정월(current_eta의 월) 열에 귀속
-- 총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T 이며, 본 집계는 해상 구간만 다룬다.
-  (2단계 확장 포인트: cut-off = onboard - etd 계획 대비 보정, 내륙 = dlvy_ata - ata)
+- 내륙 L/T (metric == 'inland' 그룹, "항만 출발 / 생산 거점 도착" 표):
+  * 실적 = dlvy_ata - ata, ata(입항) 월 기준 귀속
+  * 예상 = dlvy_eta - current_eta, dlvy_eta 월 기준 귀속
+- 총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T.
 - 아웃라이어 제외: 월별 버킷별로 IQR(사분위 범위) 방식 적용 — 머신러닝 전처리의
   표준 기법. [Q1 - 1.5×IQR, Q3 + 1.5×IQR] 범위를 벗어나는 극단값만 제거하므로
   미주 동안 55일처럼 정상적인 장기 L/T는 유지된다. 표본 4개 미만 버킷은 제거하지 않음.
 
 항로 그룹핑은 backend/app/data/leadtime_route_groups.json 설정으로 정의한다.
+그룹 스키마 v2:
+- region: 권역 헤더 (유럽/미주/아시아 등) — 프런트 섹션 구분용
+- metric: sea(기본) | inland
+- countries / country_labels: 국가 행 구성과 라벨 재정의 (기본 KR/CN/JP)
+- row_groups: 국가 대신 커스텀 행 구분 (예: 선적구분, 출발항만, 운송방식)
+  [{"row_id", "label", "field": dprt|arvl, "codes": [...]}]
 """
 from __future__ import annotations
 
@@ -48,16 +58,27 @@ LEADTIME_SELECT_COLUMNS = [
     "stopby",
     "stopby_nm",
     "cargo_type3",
+    "trpr_mode",
     "onboard_date",
     "etd",
     "atd",
     "eta",
     "eta_date",
     "ata",
+    "dlvy_eta",
+    "dlvy_ata",
 ]
 
+# dprt 접두 → 국가 판별용 (행 구성은 그룹의 countries 설정이 결정)
+KNOWN_COUNTRY_PREFIXES = ["KR", "CN", "JP", "ID", "PL"]
 COUNTRY_ORDER = ["KR", "CN", "JP"]
-COUNTRY_LABELS = {"KR": "한국", "CN": "중국", "JP": "일본"}
+COUNTRY_LABELS = {
+    "KR": "한국",
+    "CN": "중국",
+    "JP": "일본",
+    "ID": "인도네시아",
+    "PL": "북유럽",
+}
 STAT_ORDER = ["Avg", "Min", "Max"]
 MONTH_LABELS = [
     "Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.",
@@ -65,12 +86,14 @@ MONTH_LABELS = [
 ]
 
 DEFINITIONS = {
-    "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T (본 집계는 해상 L/T만)",
+    "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T",
     "scope": "집계 대상: cargo_type3 == 'FCL' (컨테이너 전적) 운송만",
+    "sea_mode": "운송모드 해상(trpr_mode 100)만 집계 — 육상·항공 제외 (모드 미기재는 FCL 기준 해상 간주)",
     "fixed_rows": "'고정값' 표시 행은 실데이터 집계가 아닌 사용자 제공 고정값 (훼리 등 spot성 구간)",
     "actual_lt": "실적 해상 L/T = ata - onboard_date (onboard_date 없으면 atd), 일 단위",
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
-    "month_basis": "월 그룹핑 = onboard_date 월 (없으면 atd 월)",
+    "inland_lt": "내륙 L/T(항만 출발/생산 거점 도착 표): 실적 = dlvy_ata - ata, 예상 = dlvy_eta - current_eta",
+    "month_basis": "월 그룹핑 = onboard_date 월 (없으면 atd 월), 내륙은 ata 월",
     "source": "각 월의 SK 화물 On-board 선사·모선의 운송 소요 시간(B-LAP bl_info)",
     "outlier": "아웃라이어 제외: 월별 항로 집계에서 IQR 방식(Q1-1.5×IQR ~ Q3+1.5×IQR)으로 극단값만 제거 (표본 4건 미만은 제거 안 함)",
 }
@@ -96,7 +119,7 @@ def _month_key(ts: pd.Timestamp) -> str:
 
 def _country_of(dprt: str) -> str | None:
     code = (dprt or "").strip().upper()
-    for country in COUNTRY_ORDER:
+    for country in KNOWN_COUNTRY_PREFIXES:
         if code.startswith(country):
             return country
     return None
@@ -161,6 +184,53 @@ def _iqr_filter(values: list[float]) -> list[float]:
     return [v for v in values if lower <= v <= upper]
 
 
+def _lt_point(
+    row: dict[str, Any],
+    onboard: pd.Timestamp | None,
+    ata: pd.Timestamp | None,
+    metric: str,
+    actual_window: list[str],
+    forecast_window: list[str],
+) -> tuple[str, float, str] | None:
+    """(kind, lt, month) — metric별 기준일·월 귀속이 다르다."""
+    if metric == "inland":
+        dlvy_ata = _ts(row.get("dlvy_ata"))
+        if ata is not None and dlvy_ata is not None:
+            lt = (dlvy_ata - ata).days
+            month = _month_key(ata)
+            if lt < 0 or month not in actual_window:
+                return None
+            return ("actual", float(lt), month)
+        eta = _ts(row.get("eta_date")) or _ts(row.get("eta"))
+        dlvy_eta = _ts(row.get("dlvy_eta"))
+        if eta is None or dlvy_eta is None:
+            return None
+        lt = (dlvy_eta - eta).days
+        month = _month_key(dlvy_eta)
+        if lt < 0 or month not in forecast_window:
+            return None
+        return ("forecast", float(lt), month)
+
+    # metric == "sea" (기본)
+    if ata is not None and onboard is not None:
+        lt = (ata - onboard).days
+        month = _month_key(onboard)
+        if lt < 0 or month not in actual_window:
+            return None
+        return ("actual", float(lt), month)
+    if ata is None:
+        eta = _ts(row.get("eta_date")) or _ts(row.get("eta"))
+        base = onboard or _ts(row.get("etd"))
+        if eta is None or base is None:
+            return None
+        lt = (eta - base).days
+        month = _month_key(eta)
+        if lt < 0 or month not in forecast_window:
+            return None
+        return ("forecast", float(lt), month)
+    return None
+
+
 def compute_leadtime_report(
     info_df: pd.DataFrame,
     *,
@@ -191,7 +261,9 @@ def compute_leadtime_report(
         )
         forecast_window.append(_month_key(pd.Timestamp(cursor)))
 
-    # buckets[group_id][country][month_key] = [lt, ...]
+    # buckets[group_id][row_key][month_key] = [lt, ...]  (실적)
+    # forecast_buckets[group_id][row_key][month_key] = [lt, ...]  (예상)
+    # row_key: 국가 코드(KR 등) 또는 row_groups의 row_id
     buckets: dict[str, dict[str, dict[str, list[float]]]] = {}
     forecast_buckets: dict[str, dict[str, dict[str, list[float]]]] = {}
 
@@ -200,42 +272,58 @@ def compute_leadtime_report(
             # FCL(컨테이너 전적)만 집계 대상
             if str(row.get("cargo_type3") or "").strip().upper() != "FCL":
                 continue
-            country = _country_of(str(row.get("dprt") or ""))
-            if country is None:
+            # 운송모드 해상(100)만 — 200/300 등 비해상 제외.
+            # 모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함.
+            mode = str(row.get("trpr_mode") or "").strip()
+            if mode and mode != "100":
                 continue
-            onboard = _ts(row.get("onboard_date")) or _ts(row.get("atd"))
-            ata = _ts(row.get("ata"))
             matched = [g for g in groups if _matches_group(row, g)]
             if not matched:
                 continue
 
-            if ata is not None and onboard is not None:
-                lt = (ata - onboard).days
-                month = _month_key(onboard)
-                if lt < 0 or month not in actual_window:
+            onboard = _ts(row.get("onboard_date")) or _ts(row.get("atd"))
+            ata = _ts(row.get("ata"))
+            dprt = str(row.get("dprt") or "")
+            arvl = str(row.get("arvl") or "")
+            country = _country_of(dprt)
+
+            for group in matched:
+                metric = str(group.get("metric") or "sea")
+                point = _lt_point(
+                    row, onboard, ata, metric, actual_window, forecast_window,
+                )
+                if point is None:
                     continue
-                for g in matched:
-                    buckets.setdefault(g["group_id"], {}).setdefault(
-                        country, {}
-                    ).setdefault(month, []).append(float(lt))
-            elif ata is None:
-                eta = _ts(row.get("eta_date")) or _ts(row.get("eta"))
-                base = onboard or _ts(row.get("etd"))
-                if eta is None or base is None:
+                kind, lt, month = point
+
+                row_groups = group.get("row_groups") or []
+                if row_groups:
+                    # 커스텀 행 구분 (선적구분/출발항만/운송방식 등)
+                    row_keys = [
+                        rg["row_id"]
+                        for rg in row_groups
+                        if _code_match(
+                            dprt if rg.get("field", "dprt") == "dprt" else arvl,
+                            rg.get("codes", []),
+                        )
+                    ]
+                else:
+                    if country is None:
+                        continue
+                    row_keys = [country]
+                if not row_keys:
                     continue
-                lt = (eta - base).days
-                month = _month_key(eta)
-                if lt < 0 or month not in forecast_window:
-                    continue
-                for g in matched:
-                    forecast_buckets.setdefault(g["group_id"], {}).setdefault(
-                        country, {}
-                    ).setdefault(month, []).append(float(lt))
+
+                source = buckets if kind == "actual" else forecast_buckets
+                for key in row_keys:
+                    source.setdefault(group["group_id"], {}).setdefault(
+                        key, {}
+                    ).setdefault(month, []).append(lt)
 
     def _cells(source: dict[str, dict[str, list[float]]], group_id: str,
-               country: str, stat: str) -> dict[str, float]:
+               row_key: str, stat: str) -> dict[str, float]:
         out: dict[str, float] = {}
-        for month, values in source.get(group_id, {}).get(country, {}).items():
+        for month, values in source.get(group_id, {}).get(row_key, {}).items():
             values = _iqr_filter(values)
             if not values:
                 continue
@@ -250,8 +338,8 @@ def compute_leadtime_report(
     # 월 열 확정 (실적/예상 데이터가 있는 월만)
     used_months: dict[str, str] = {}
     for source, kind in ((buckets, "actual"), (forecast_buckets, "forecast")):
-        for countries in source.values():
-            for months_map in countries.values():
+        for row_keys in source.values():
+            for months_map in row_keys.values():
                 for key in months_map:
                     used_months[key] = kind
 
@@ -271,18 +359,39 @@ def compute_leadtime_report(
     group_payloads = []
     for group in groups:
         rows = []
-        for country in COUNTRY_ORDER:
-            for stat in STAT_ORDER:
-                cells = _cells(buckets, group["group_id"], country, stat)
-                fcells = _cells(forecast_buckets, group["group_id"], country, stat)
-                rows.append(
-                    {
-                        "country": country,
-                        "country_label": COUNTRY_LABELS[country],
-                        "stat": stat,
-                        "cells": {**cells, **fcells},
-                    }
-                )
+        group_id = group["group_id"]
+        row_groups = group.get("row_groups") or []
+        if row_groups:
+            # 커스텀 행 구분 그룹 — 설정 순서대로 행 방출
+            for rg in row_groups:
+                for stat in STAT_ORDER:
+                    cells = _cells(buckets, group_id, rg["row_id"], stat)
+                    fcells = _cells(
+                        forecast_buckets, group_id, rg["row_id"], stat,
+                    )
+                    rows.append(
+                        {
+                            "country": rg["row_id"],
+                            "country_label": rg.get("label", rg["row_id"]),
+                            "stat": stat,
+                            "cells": {**cells, **fcells},
+                        }
+                    )
+        else:
+            countries = group.get("countries") or COUNTRY_ORDER
+            labels = {**COUNTRY_LABELS, **(group.get("country_labels") or {})}
+            for country in countries:
+                for stat in STAT_ORDER:
+                    cells = _cells(buckets, group_id, country, stat)
+                    fcells = _cells(forecast_buckets, group_id, country, stat)
+                    rows.append(
+                        {
+                            "country": country,
+                            "country_label": labels.get(country, country),
+                            "stat": stat,
+                            "cells": {**cells, **fcells},
+                        }
+                    )
         # 고정 행 주입 (사용자 제공 고정값 — 실데이터 집계 없이 모든 월 열 동일 값)
         for fixed in group.get("fixed_rows", []):
             values = fixed.get("values", {})
@@ -302,7 +411,14 @@ def compute_leadtime_report(
                     }
                 )
         group_payloads.append(
-            {"group_id": group["group_id"], "name": group["name"], "rows": rows}
+            {
+                "group_id": group_id,
+                "name": group["name"],
+                "region": str(group.get("region") or ""),
+                "metric": str(group.get("metric") or "sea"),
+                "row_label": str(group.get("row_label") or "국가"),
+                "rows": rows,
+            }
         )
 
     return {

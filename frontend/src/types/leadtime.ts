@@ -18,6 +18,9 @@ export interface LeadtimeRow {
 export interface LeadtimeGroup {
   group_id: string
   name: string
+  region?: string // 권역 헤더 (유럽/미주/아시아)
+  metric?: string // sea(기본) | inland
+  row_label?: string // 첫 열 구분자 라벨 (국가/선적구분/출발항만/운송방식)
   rows: LeadtimeRow[]
 }
 

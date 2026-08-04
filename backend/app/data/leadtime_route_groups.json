@@ -2,43 +2,212 @@
   "groups": [
     {
       "group_id": "ADRIA_SUEZ",
+      "region": "유럽",
       "name": "아드리아해 항만 도착 / 수에즈 경유",
-      "arvl_codes": ["SIKOP", "ITGOA", "ITTRS", "HRRIJ", "SIKOP1"],
-      "stopby_match": ["SUEZ", "수에즈", "EGSCN"],
+      "arvl_codes": [
+        "SIKOP",
+        "ITGOA",
+        "ITTRS",
+        "HRRIJ",
+        "SIKOP1"
+      ],
+      "stopby_match": [
+        "SUEZ",
+        "수에즈",
+        "EGSCN"
+      ],
       "stopby_exclude": []
     },
     {
       "group_id": "ADRIA_CAPE",
+      "region": "유럽",
       "name": "아드리아해 항만 도착 / 희망봉 경유",
-      "arvl_codes": ["SIKOP", "ITGOA", "ITTRS", "HRRIJ", "SIKOP1"],
-      "stopby_match": ["CAPE", "희망봉", "GOOD HOPE", "ZACPT"],
+      "arvl_codes": [
+        "SIKOP",
+        "ITGOA",
+        "ITTRS",
+        "HRRIJ",
+        "SIKOP1"
+      ],
+      "stopby_match": [
+        "CAPE",
+        "희망봉",
+        "GOOD HOPE",
+        "ZACPT"
+      ],
       "stopby_exclude": []
     },
     {
-      "group_id": "US_EAST",
-      "name": "미주 동안 항만 도착",
-      "arvl_codes": ["USNYC", "USSAV", "USCHS", "USBAL", "USNFK", "USBOS"],
-      "stopby_match": [],
-      "stopby_exclude": []
-    },
-    {
-      "group_id": "CHINA_TO_KOREA",
-      "name": "중국 항만 선적 / 한국 항만 도착",
-      "arvl_codes": ["KR*"],
-      "dprt_codes": [
-        "CNTSN", "CNTAO", "CNDLC", "CNZJG", "CNLYG", "CNDAF",
-        "CNSHA", "CNNGB", "CNSZX", "CNSHK"
+      "group_id": "EU_INLAND",
+      "region": "유럽",
+      "name": "아드리아해 항만 출발 / 유럽 생산 거점 도착",
+      "metric": "inland",
+      "arvl_codes": [
+        "SIKOP",
+        "ITGOA",
+        "ITTRS",
+        "HRRIJ",
+        "SIKOP1"
       ],
       "stopby_match": [],
       "stopby_exclude": [],
+      "row_groups": [
+        {
+          "row_id": "DIRECT_TRUCK",
+          "label": "Direct Truck",
+          "field": "dprt",
+          "codes": [
+            "__PENDING__운송방식_구분규칙_확인필요__"
+          ]
+        },
+        {
+          "row_id": "RAIL_TRUCK",
+          "label": "Rail+Truck",
+          "field": "dprt",
+          "codes": [
+            "__PENDING__운송방식_구분규칙_확인필요__"
+          ]
+        }
+      ],
+      "row_label": "운송방식"
+    },
+    {
+      "group_id": "US_EAST",
+      "region": "미주",
+      "name": "미주 동안 항만 도착",
+      "arvl_codes": [
+        "USNYC",
+        "USSAV",
+        "USCHS",
+        "USBAL",
+        "USNFK",
+        "USBOS"
+      ],
+      "countries": [
+        "KR",
+        "JP",
+        "ID",
+        "PL"
+      ],
+      "stopby_match": [],
+      "stopby_exclude": []
+    },
+    {
+      "group_id": "US_WEST",
+      "region": "미주",
+      "name": "미주 서안 항만 도착",
+      "arvl_codes": [
+        "USLAX",
+        "USLGB",
+        "USOAK",
+        "USSEA",
+        "USPDX"
+      ],
+      "countries": [
+        "KR",
+        "JP",
+        "ID"
+      ],
+      "stopby_match": [],
+      "stopby_exclude": []
+    },
+    {
+      "group_id": "US_INLAND",
+      "region": "미주",
+      "name": "미주 항만 출발 / 미주 생산 거점 도착",
+      "metric": "inland",
+      "arvl_codes": [
+        "USNYC",
+        "USSAV",
+        "USCHS",
+        "USBAL",
+        "USNFK",
+        "USBOS",
+        "USLAX",
+        "USLGB",
+        "USOAK",
+        "USSEA",
+        "USPDX"
+      ],
+      "stopby_match": [],
+      "stopby_exclude": [],
+      "row_groups": [
+        {
+          "row_id": "US_EAST_PORT",
+          "label": "미주동부항만",
+          "field": "arvl",
+          "codes": [
+            "USNYC",
+            "USSAV",
+            "USCHS",
+            "USBAL",
+            "USNFK",
+            "USBOS"
+          ]
+        },
+        {
+          "row_id": "US_WEST_PORT",
+          "label": "미주서부항만",
+          "field": "arvl",
+          "codes": [
+            "USLAX",
+            "USLGB",
+            "USOAK",
+            "USSEA",
+            "USPDX"
+          ]
+        }
+      ],
+      "row_label": "출발항만"
+    },
+    {
+      "group_id": "CHINA_TO_KOREA",
+      "region": "아시아",
+      "name": "중국 항만 선적 / 한국 항만 도착",
+      "arvl_codes": [
+        "KR*"
+      ],
+      "stopby_match": [],
+      "stopby_exclude": [],
+      "row_groups": [
+        {
+          "row_id": "NORTH_CN_CNTR",
+          "label": "북중국(컨테이너)",
+          "field": "dprt",
+          "codes": [
+            "CNTSN",
+            "CNTAO",
+            "CNDLC",
+            "CNZJG",
+            "CNLYG",
+            "CNDAF"
+          ]
+        },
+        {
+          "row_id": "SOUTH_CN_CNTR",
+          "label": "남중국(컨테이너)",
+          "field": "dprt",
+          "codes": [
+            "CNSHA",
+            "CNNGB",
+            "CNSZX",
+            "CNSHK"
+          ]
+        }
+      ],
       "fixed_rows": [
         {
           "country": "FERRY_NORTH_CN",
           "country_label": "북중국(훼리)",
-          "values": {"Avg": 1, "Min": 1, "Max": 1},
+          "values": {
+            "Avg": 1,
+            "Min": 1,
+            "Max": 1
+          },
           "note": "훼리는 spot성이라 실데이터 집계 불가 — 사용자 제공 고정값"
         }
-      ]
+      ],
+      "row_label": "선적구분"
     }
   ]
 }

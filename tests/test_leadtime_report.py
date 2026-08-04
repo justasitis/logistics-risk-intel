@@ -189,6 +189,98 @@ def test_outlier_excluded_by_iqr():
     assert "outlier" in fc_report["definitions"]
 
 
+def test_sea_mode_only():
+    """운송모드 해상(100)만 집계 — 200/300 제외, 미기재는 해상 간주."""
+    df = pd.DataFrame([
+        _row(trpr_mode="100", onboard_date="2026-05-10", ata="2026-06-09"),  # 해상 포함
+        _row(trpr_mode="300", onboard_date="2026-05-10", ata="2026-06-19"),  # 항공 제외
+        _row(trpr_mode="200", onboard_date="2026-05-10", ata="2026-06-19"),  # 육상 제외
+        _row(trpr_mode=None, onboard_date="2026-05-10", ata="2026-06-09"),   # 미기재 포함
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 30.0
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 30.0  # 항공 40일 미반영
+    assert "sea_mode" in report["definitions"]
+
+
+# ---------- 그룹 스키마 v2: 권역/커스텀 행/내륙 L/T ----------
+
+def test_row_groups_custom_dimension():
+    """row_groups: 국가 대신 선적구분 등 커스텀 행으로 버킷."""
+    groups = [{
+        "group_id": "CN_KR", "name": "중국→한국", "arvl_codes": ["KR*"],
+        "row_groups": [
+            {"row_id": "NORTH", "label": "북중국(컨테이너)", "field": "dprt", "codes": ["CNTSN"]},
+            {"row_id": "SOUTH", "label": "남중국(컨테이너)", "field": "dprt", "codes": ["CNSZX"]},
+        ],
+    }]
+    df = pd.DataFrame([
+        _row(dprt="CNTSN", arvl="KRPUS", onboard_date="2026-05-01", ata="2026-05-03"),
+        _row(dprt="CNSZX", arvl="KRPUS", onboard_date="2026-05-01", ata="2026-05-08"),
+        _row(dprt="CNSHA", arvl="KRPUS", onboard_date="2026-05-01", ata="2026-05-04"),  # 미해당 제외
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=groups)
+    rows = report["groups"][0]["rows"]
+    north = next(r for r in rows if r["country"] == "NORTH" and r["stat"] == "Avg")
+    south = next(r for r in rows if r["country"] == "SOUTH" and r["stat"] == "Avg")
+    assert north["country_label"] == "북중국(컨테이너)"
+    assert north["cells"] == {"2026-05": 2.0}
+    assert south["cells"] == {"2026-05": 7.0}
+
+
+def test_inland_metric_actual_and_forecast():
+    """inland: 실적 dlvy_ata-ata(ata 월), 예상 dlvy_eta-eta(dlvy_eta 월)."""
+    groups = [{
+        "group_id": "US_INLAND", "name": "미주 내륙", "metric": "inland",
+        "arvl_codes": ["USNYC"],
+        "row_groups": [
+            {"row_id": "EAST", "label": "미주동부항만", "field": "arvl", "codes": ["USNYC"]},
+        ],
+    }]
+    df = pd.DataFrame([
+        _row(dprt="KRPUS", arvl="USNYC", onboard_date="2026-04-10",
+             ata="2026-05-20", dlvy_ata="2026-05-23"),   # 실적 3일 (5월)
+        _row(dprt="KRPUS", arvl="USNYC", onboard_date="2026-07-01",
+             ata=None, eta_date="2026-08-05", dlvy_eta="2026-08-07"),  # 예상 2일 (8월)
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=groups)
+    avg = next(
+        r for r in report["groups"][0]["rows"]
+        if r["country"] == "EAST" and r["stat"] == "Avg"
+    )
+    assert avg["cells"] == {"2026-05": 3.0, "2026-08": 2.0}
+    kinds = {c["key"]: c["kind"] for c in report["month_columns"]}
+    assert kinds["2026-05"] == "actual" and kinds["2026-08"] == "forecast"
+
+
+def test_countries_override_and_labels():
+    """countries/country_labels: 그룹별 국가 행 구성과 라벨 재정의."""
+    groups = [{
+        "group_id": "US_EAST", "name": "미주 동안", "arvl_codes": ["USNYC"],
+        "countries": ["KR", "ID", "PL"], "country_labels": {"PL": "북유럽"},
+    }]
+    df = pd.DataFrame([
+        _row(dprt="IDJKT", arvl="USNYC", onboard_date="2026-05-01", ata="2026-06-01"),
+        _row(dprt="PLGDN", arvl="USNYC", onboard_date="2026-05-01", ata="2026-06-11"),
+        _row(dprt="CNSHA", arvl="USNYC", onboard_date="2026-05-01", ata="2026-06-21"),
+    ])
+    report = svc.compute_leadtime_report(df, today=TODAY, groups=groups)
+    rows = report["groups"][0]["rows"]
+    assert {r["country"] for r in rows} == {"KR", "ID", "PL"}  # CN 행 없음
+    pl = next(r for r in rows if r["country"] == "PL" and r["stat"] == "Avg")
+    assert pl["country_label"] == "북유럽"
+    assert pl["cells"] == {"2026-05": 41.0}
+    assert _cell(report, "US_EAST", "ID", "Avg", "2026-05") == 31.0
+
+
+def test_real_config_loads_and_has_regions():
+    groups = svc.load_route_groups()
+    ids = [g["group_id"] for g in groups]
+    assert len(ids) == len(set(ids))
+    regions = {g.get("region") for g in groups}
+    assert {"유럽", "미주", "아시아"} <= regions
+
+
 # ---------- 고정 행(fixed rows) + dprt 매칭 ----------
 
 FERRY_GROUPS = GROUPS + [
