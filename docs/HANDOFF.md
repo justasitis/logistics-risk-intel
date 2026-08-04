@@ -44,8 +44,8 @@
 - **searoute==1.4.3 고정** (algorithm 인자 없음). 한글 Windows pip 설치 시 `set PYTHONUTF8=1`
 - **사내 Nexus**: pip `pypi-group-internal`, npm도 Nexus (`10.242.199.4:8987`). 새 의존성은 Nexus 존재 확인 필요
 - **PS1은 UTF-8 BOM+CRLF**, **CMD는 BOM 없는 UTF-8+CRLF** + `chcp 65001` (한글 깨짐/파싱 오류 방지)
-- **SharePoint 경로**: `{username}` 플레이스홀더 자동 치환 (user_path.py). 동기화 폴터명이 PC마다 다름("Global물류팀 - LogisticsRisk" / "SK on - LogisticsRisk") → resolve_synced_path가 자동 탐색 + Repair-SharePointPath.ps1이 junction 생성
-- **SharePoint 루트**: `C:\Users\{username}\SK on\Global물류팀 - LogisticsRisk` — 하위: AIS\Marinesia\Current, MI\current(일자별 external_mi_candidates_YYMMDD.json), MI\mi_runs, MI\mi_event_registry.json, MI\freight_indices\freight_indices.json, MI\insight_drafts, watchlist\
+- **SharePoint 경로**: `{username}` 플레이스홀더 자동 치환 (user_path.py). 동기화 폴터명이 PC마다 다를 수 있어("M365_TtNUJmLE - 데이터_접근금지" / 구 "Global물류팀 - LogisticsRisk" 등) resolve_synced_path가 마커(logisticsrisk, 데이터_접근금지)로 자동 탐색 + Repair-SharePointPath.ps1이 junction 생성
+- **SharePoint 루트**: `C:\Users\{username}\SK on\M365_TtNUJmLE - 데이터_접근금지` — 하위: AIS\Marinesia\Current, MI\current(일자별 external_mi_candidates_YYMMDD.json), MI\mi_runs, MI\mi_event_registry.json, MI\freight_indices\freight_indices.json, MI\insight_drafts, watchlist\
 - **프런트 규칙**: `as any` 금지, `--li-*` 테마 토큰만, `!important` 금지, 최소 폰트 11px(수치 12px), 신규 npm 의존성 금지, 시작 시 자동 조회 금지(명시 조회만)
 - **백엔드 규칙**: 외부 호출 실패 시 남부 예외 문자열 노출 금지, 파일 쓰기는 atomic(tmp→os.replace), 500은 로그만
 - **git 작업은 사용자 승인 후**, 커밋 author: `-c user.name="milkg" -c user.email="milkg@users.noreply.github.com"`

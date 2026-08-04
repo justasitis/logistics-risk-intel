@@ -104,3 +104,22 @@ class TestResolveSyncedPath:
         result = resolve_synced_path(configured)
         assert "so23159" in result
         assert "SK on - LogisticsRisk" in result
+
+    def test_new_folder_name_recognized(self, tmp_path):
+        # 새 동기화 폴터 "M365_TtNUJmLE - 데이터_접근금지" 도 마커로 탐지된다.
+        self._make(tmp_path, "M365_TtNUJmLE - 데이터_접근금지")
+        configured = str(
+            tmp_path / "user" / "SK on" / "M365_TtNUJmLE - 데이터_접근금지" / "MI" / "mi_runs"
+        )
+        # 경로가 존재하면 그대로 반환
+        (tmp_path / "user" / "SK on" / "M365_TtNUJmLE - 데이터_접근금지" / "MI" / "mi_runs").mkdir(parents=True)
+        assert resolve_synced_path(configured) == configured
+
+    def test_new_folder_name_found_by_marker(self, tmp_path):
+        # 설정은 새 이름인데 실제 폴터가 구 이름인 경우에도 탐색 치환된다.
+        self._make(tmp_path, "M365_TtNUJmLE - 데이터_접근금지")
+        configured = str(
+            tmp_path / "user" / "SK on" / "Global물류팀 - LogisticsRisk" / "MI"
+        )
+        result = resolve_synced_path(configured)
+        assert "M365_TtNUJmLE - 데이터_접근금지" in result

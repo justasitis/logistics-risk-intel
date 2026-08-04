@@ -40,7 +40,7 @@ from ..core.user_path import resolve_synced_path
 # ---------- 환경 파라미터 ----------
 
 DEFAULT_REGISTRY_SP_PATH = (
-    r"C:\Users\{username}\SK on\Global물류팀 - LogisticsRisk\MI\mi_event_registry.json"
+    r"C:\Users\{username}\SK on\M365_TtNUJmLE - 데이터_접근금지\MI\mi_event_registry.json"
 )
 FALLBACK_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / "data" / "mi_event_registry.json"

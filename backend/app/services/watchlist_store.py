@@ -19,7 +19,7 @@ from typing import Any
 from ..core.user_path import current_username, resolve_synced_path
 
 DEFAULT_WATCHLIST_SP_DIR = (
-    r"C:\Users\{username}\SK on\Global물류팀 - LogisticsRisk\watchlist"
+    r"C:\Users\{username}\SK on\M365_TtNUJmLE - 데이터_접근금지\watchlist"
 )
 FALLBACK_WATCHLIST_DIR = (
     Path(__file__).resolve().parents[2] / "data" / "watchlist"

@@ -47,7 +47,7 @@ echo ==========================================
 echo   설치 완료
 echo ==========================================
 echo.
-echo C:\Users\%USERNAME%\SK on\Global물류팀 - LogisticsRisk
+echo C:\Users\%USERNAME%\SK on\M365_TtNUJmLE - 데이터_접근금지
 echo 경로에 폴터가 생겼는지 확인하세요.
 echo.
 pause

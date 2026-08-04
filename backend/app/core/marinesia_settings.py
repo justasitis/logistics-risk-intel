@@ -10,7 +10,7 @@ from backend.app.core.user_path import resolve_synced_path
 
 # {username} 은 실행 환경의 로그인 사용자명으로 자동 치환된다 (user_path.expand_username).
 DEFAULT_SHAREPOINT_ROOT = Path(
-    r"C:\Users\{username}\SK on\Global물류팀 - LogisticsRisk"
+    r"C:\Users\{username}\SK on\M365_TtNUJmLE - 데이터_접근금지"
 )
 
 

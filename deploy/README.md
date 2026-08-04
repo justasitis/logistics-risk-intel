@@ -25,9 +25,9 @@ VDI 반영은 robocopy(`/MIR`, `/PURGE` 미사용 — VDI 측 파일 삭제 없�
 powershell -NoProfile -ExecutionPolicy Bypass -File Install-OneDriveSpecificFolderSync_v1.5.ps1
 ```
 
-3. 설치 마지막에 **경로 표준화**가 자동 실행된다 — OneDrive는 PC마다 동기화 폴터명을 다르게 만든다
-   (예: `SK on - LogisticsRisk`). `Repair-SharePointPath.ps1`이 실제 위치를 찾아 표준 경로
-   (`...\SK on\Global물류팀 - LogisticsRisk`)로 Junction 연결한다. 실패하면 동기화 완료 후
+3. 설치 마지막에 **경로 표준화**가 자동 실행된다 — OneDrive는 PC마다 동기화 폴터명을 다르게 만든다.
+   `Repair-SharePointPath.ps1`이 실제 위치를 찾아 표준 경로
+   (`...\SK on\M365_TtNUJmLE - 데이터_접근금지`)로 Junction 연결한다. 실패하면 동기화 완료 후
    `Repair-SharePointPath.ps1`만 다시 실행하면 된다.
 4. 이후는 일반 배포 절차와 동일 (프로젝트 배치 → `.env` → `02_VDI-Deploy.cmd`)
 

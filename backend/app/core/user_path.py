@@ -23,11 +23,20 @@ def expand_username(value: str) -> str:
     return value.replace("{username}", current_username())
 
 
-def _find_synced_folder(home: Path) -> Path | None:
-    """OneDrive 루트 후보 아래에서 *LogisticsRisk* 폴터를 찾는다.
+# 동기화 폴터 판별 마커 (소문자 비교) — OneDrive는 PC/계정마다 폴터명을
+# 다르게 만든다 (예: "Global물류팀 - LogisticsRisk", "SK on - LogisticsRisk",
+# "M365_TtNUJmLE - 데이터_접근금지"). 새 동기화 폴터로 바뀌면 여기에 추가한다.
+SYNC_FOLDER_MARKERS = ("logisticsrisk", "데이터_접근금지")
 
-    OneDrive는 PC/계정마다 동기화 폴터명을 다르게 만든다
-    (예: "Global물류팀 - LogisticsRisk", "SK on - LogisticsRisk").
+
+def _is_sync_folder(name: str) -> bool:
+    lowered = name.lower()
+    return any(marker in lowered for marker in SYNC_FOLDER_MARKERS)
+
+
+def _find_synced_folder(home: Path) -> Path | None:
+    """OneDrive 루트 후보 아래에서 마커가 포함된 동기화 폴터를 찾는다.
+
     AIS 또는 MI 하위 폴터가 있는 것을 우선한다.
     """
     if not home.exists():
@@ -41,7 +50,7 @@ def _find_synced_folder(home: Path) -> Path | None:
         except OSError:
             continue
         for child in children:
-            if child.is_dir() and "logisticsrisk" in child.name.lower():
+            if child.is_dir() and _is_sync_folder(child.name):
                 matches.append(child)
     if not matches:
         return None
@@ -54,7 +63,7 @@ def _find_synced_folder(home: Path) -> Path | None:
 def resolve_synced_path(value: str) -> str:
     """{username} 치환 후, 경로가 없으면 동기화 폴터명 차이를 흡수한다.
 
-    설정 경로에 *LogisticsRisk* 세그먼트가 포함되어 있고 실제 폴터가
+    설정 경로에 마커 세그먼트가 포함되어 있고 실제 폴터가
     다른 이름으로 동기화된 경우, 탐색된 실제 폴터명으로 교체한 경로를 반환한다.
     찾지 못하면 원래 경로를 그대로 반환한다.
     """
@@ -64,7 +73,7 @@ def resolve_synced_path(value: str) -> str:
         return resolved
 
     segment = next(
-        (part for part in path.parts if "logisticsrisk" in part.lower()),
+        (part for part in path.parts if _is_sync_folder(part)),
         None,
     )
     if segment is None:
