@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { getRouteMaster } from '../services/freightApi'
 import type { RouteMasterResponse, RouteMasterRow } from '../types/routeMaster'
 
@@ -9,6 +9,15 @@ const DIM_OPTIONS = [
   { key: 'lsp_nm', label: '물류사' },
   { key: 'bsns_ccd_nm', label: '사업구분' },
   { key: 'trpr_mode', label: '운송모드' },
+] as const
+
+const FIXED_COLUMNS = [
+  { key: 'dprt', label: '출발코드' },
+  { key: 'dprt_nm', label: '출발항' },
+  { key: 'arvl', label: '도착코드' },
+  { key: 'arvl_nm', label: '도착항' },
+  { key: 'to_stlc_cd', label: '최종사이트코드' },
+  { key: 'to_stlc_nm', label: '최종사이트명' },
 ] as const
 
 const COMPANY_OPTIONS = ['SKO', 'SKOH', 'SKBM', 'SKBA', 'SKOJ', 'SKOY']
@@ -22,6 +31,9 @@ const result = ref<RouteMasterResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 const queried = ref(false)
+
+// 컬럼별 멀티선택 필터 — key: 선택된 값 목록 (빈 배열 = 전체)
+const columnFilters = reactive<Record<string, string[]>>({})
 
 function toggleDim(key: string) {
   const idx = selectedDims.value.indexOf(key)
@@ -53,6 +65,8 @@ async function query() {
       etdTo: etdTo.value,
       etdDays: days,
     })
+    // 새 조회 결과에 맞지 않는 필터 선택값은 초기화
+    for (const key of Object.keys(columnFilters)) delete columnFilters[key]
   } catch (e) {
     result.value = null
     error.value = e instanceof Error ? e.message : '경로 조회 실패'
@@ -68,6 +82,52 @@ function dimValue(row: RouteMasterRow, key: string): string {
   const value = row[key as keyof RouteMasterRow]
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
+
+// ---------- 컬럼별 멀티선택 필터 ----------
+const filterColumns = computed(() => [
+  ...selectedDims.value.map((key) => ({
+    key,
+    label: DIM_OPTIONS.find((o) => o.key === key)?.label ?? key,
+  })),
+  ...FIXED_COLUMNS,
+])
+
+function cellValue(row: RouteMasterRow, key: string): string {
+  return dimValue(row, key)
+}
+
+function distinctValues(key: string): string[] {
+  if (!result.value) return []
+  const values = new Set(result.value.rows.map((row) => cellValue(row, key)))
+  return [...values].sort((a, b) => a.localeCompare(b))
+}
+
+function isFilterActive(key: string): boolean {
+  return (columnFilters[key]?.length ?? 0) > 0
+}
+
+function toggleFilterValue(key: string, value: string) {
+  const selected = columnFilters[key] ?? []
+  const idx = selected.indexOf(value)
+  if (idx >= 0) selected.splice(idx, 1)
+  else selected.push(value)
+  columnFilters[key] = selected
+}
+
+function clearFilter(key: string) {
+  columnFilters[key] = []
+}
+
+const filteredRows = computed<RouteMasterRow[]>(() => {
+  if (!result.value) return []
+  return result.value.rows.filter((row) =>
+    filterColumns.value.every(({ key }) => {
+      const selected = columnFilters[key]
+      if (!selected || !selected.length) return true
+      return selected.includes(cellValue(row, key))
+    }),
+  )
+})
 </script>
 
 <template>
@@ -120,34 +180,73 @@ function dimValue(row: RouteMasterRow, key: string): string {
     <p v-if="!queried" class="hint">구분조건과 법인을 선택하고 조회를 누르세요.</p>
 
     <section v-if="result && result.rows.length" class="card table-card">
-      <table>
-        <thead>
-          <tr>
-            <th v-for="d in selectedDims" :key="d">
-              {{ DIM_OPTIONS.find((o) => o.key === d)?.label ?? d }}
-            </th>
-            <th>출발코드</th>
-            <th>출발항</th>
-            <th>도착코드</th>
-            <th>도착항</th>
-            <th>최종사이트코드</th>
-            <th>최종사이트명</th>
-            <th class="num">운송건수</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(row, i) in result.rows" :key="i">
-            <td v-for="d in selectedDims" :key="d">{{ dimValue(row, d) }}</td>
-            <td>{{ row.dprt }}</td>
-            <td>{{ row.dprt_nm }}</td>
-            <td>{{ row.arvl }}</td>
-            <td>{{ row.arvl_nm }}</td>
-            <td>{{ row.to_stlc_cd }}</td>
-            <td>{{ row.to_stlc_nm }}</td>
-            <td class="num">{{ row.shipment_count.toLocaleString() }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="filter-bar">
+        <span class="label">열 필터</span>
+        <details
+          v-for="col in filterColumns"
+          :key="col.key"
+          class="col-filter"
+          :class="{ active: isFilterActive(col.key) }"
+        >
+          <summary>
+            {{ col.label }}
+            <span v-if="isFilterActive(col.key)" class="filter-count">
+              {{ (columnFilters[col.key] ?? []).length }}
+            </span>
+          </summary>
+          <div class="filter-list">
+            <div class="filter-actions">
+              <button type="button" class="mini-btn" @click="clearFilter(col.key)">전체 해제</button>
+            </div>
+            <label v-for="v in distinctValues(col.key)" :key="v" class="chk">
+              <input
+                type="checkbox"
+                :checked="(columnFilters[col.key] ?? []).includes(v)"
+                @change="toggleFilterValue(col.key, v)"
+              />
+              {{ v }}
+            </label>
+          </div>
+        </details>
+        <span v-if="filteredRows.length !== result.rows.length" class="meta">
+          표시 {{ filteredRows.length.toLocaleString() }} / {{ result.rows.length.toLocaleString() }}건
+        </span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th v-for="d in selectedDims" :key="d">
+                {{ DIM_OPTIONS.find((o) => o.key === d)?.label ?? d }}
+              </th>
+              <th>출발코드</th>
+              <th>출발항</th>
+              <th>도착코드</th>
+              <th>도착항</th>
+              <th>최종사이트코드</th>
+              <th>최종사이트명</th>
+              <th class="num">운송건수</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, i) in filteredRows" :key="i">
+              <td v-for="d in selectedDims" :key="d">{{ dimValue(row, d) }}</td>
+              <td>{{ row.dprt }}</td>
+              <td>{{ row.dprt_nm }}</td>
+              <td>{{ row.arvl }}</td>
+              <td>{{ row.arvl_nm }}</td>
+              <td>{{ row.to_stlc_cd }}</td>
+              <td>{{ row.to_stlc_nm }}</td>
+              <td class="num">{{ row.shipment_count.toLocaleString() }}</td>
+            </tr>
+            <tr v-if="!filteredRows.length">
+              <td :colspan="selectedDims.length + 7" class="empty-cell">
+                열 필터 조건에 맞는 행이 없습니다.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </div>
 </template>
@@ -228,11 +327,19 @@ function dimValue(row: RouteMasterRow, key: string): string {
   color: var(--li-risk-high);
 }
 .table-card {
-  overflow-x: auto;
   padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 구분조건을 많이 선택필수록 열이 늘어나므로 가로 스크롤을 명시적으로 보장 */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
 }
 table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -247,9 +354,15 @@ td {
 th {
   background: var(--li-bg-app-2);
   color: var(--li-text-soft);
+  position: sticky;
+  top: 0;
 }
 .num {
   text-align: right;
+}
+.empty-cell {
+  text-align: center;
+  color: var(--li-text-muted);
 }
 .hint {
   color: var(--li-text-muted);
@@ -259,5 +372,81 @@ th {
   color: var(--li-risk-critical);
   margin: 0;
   font-size: 12px;
+}
+
+/* ---------- 컬럼별 멀티선택 필터 ---------- */
+.filter-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 4px 0;
+}
+.col-filter {
+  position: relative;
+  border: 1px solid var(--li-border);
+  border-radius: 999px;
+  background: var(--li-surface-strong);
+  font-size: 12px;
+}
+.col-filter.active {
+  border-color: var(--li-blue);
+  background: var(--li-surface-blue);
+}
+.col-filter summary {
+  padding: 4px 12px;
+  cursor: pointer;
+  color: var(--li-text-soft);
+  list-style: none;
+  user-select: none;
+}
+.col-filter summary::-webkit-details-marker {
+  display: none;
+}
+.filter-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--li-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.col-filter[open] {
+  border-radius: var(--li-radius-sm);
+  z-index: 20;
+}
+.filter-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--li-surface-strong);
+  border: 1px solid var(--li-border);
+  border-radius: var(--li-radius-sm);
+  box-shadow: var(--li-shadow-float);
+}
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--li-border);
+  padding-bottom: 4px;
+}
+.mini-btn {
+  border: none;
+  background: transparent;
+  color: var(--li-blue);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
 }
 </style>
