@@ -978,6 +978,8 @@ ROUTE_MASTER_ALLOWED_DIMS = {
     "lsp_nm",
     "bsns_ccd_nm",
     "trpr_mode",
+    "to_stlc_cd",
+    "to_stlc_nm",
 }
 ROUTE_MASTER_REQUIRED_COLUMNS = [
     "dprt", "dprt_nm", "arvl", "arvl_nm", "to_stlc_cd", "to_stlc_nm",
@@ -1077,7 +1079,10 @@ def route_master(
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    group_columns = selected_dims + ROUTE_MASTER_REQUIRED_COLUMNS
+    # dims가 필수 컬럼(to_stlc_cd 등)과 겹칠 수 있으므로 중복 제거
+    group_columns = list(dict.fromkeys(
+        selected_dims + ROUTE_MASTER_REQUIRED_COLUMNS
+    ))
     work = info_df.copy()
     for column in ["trpr_no", *group_columns]:
         if column not in work.columns:

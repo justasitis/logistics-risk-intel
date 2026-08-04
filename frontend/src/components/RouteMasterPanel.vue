@@ -9,6 +9,8 @@ const DIM_OPTIONS = [
   { key: 'lsp_nm', label: '물류사' },
   { key: 'bsns_ccd_nm', label: '사업구분' },
   { key: 'trpr_mode', label: '운송모드' },
+  { key: 'to_stlc_cd', label: '최종사이트코드' },
+  { key: 'to_stlc_nm', label: '최종사이트명' },
 ] as const
 
 const FIXED_COLUMNS = [
@@ -84,12 +86,17 @@ function dimValue(row: RouteMasterRow, key: string): string {
 }
 
 // ---------- 컬럼별 멀티선택 필터 ----------
+// dims로 선택된 열은 고정 열 표시에서 제외 (최종사이트코드/명 중복 방지)
+const visibleFixedColumns = computed(() =>
+  FIXED_COLUMNS.filter((c) => !selectedDims.value.includes(c.key)),
+)
+
 const filterColumns = computed(() => [
   ...selectedDims.value.map((key) => ({
     key,
     label: DIM_OPTIONS.find((o) => o.key === key)?.label ?? key,
   })),
-  ...FIXED_COLUMNS,
+  ...visibleFixedColumns.value,
 ])
 
 function cellValue(row: RouteMasterRow, key: string): string {
@@ -128,6 +135,37 @@ const filteredRows = computed<RouteMasterRow[]>(() => {
     }),
   )
 })
+
+// ---------- 엑셀(CSV) 다운로드 — 현재 열 필터가 적용된 표시 행 기준 ----------
+function exportCsv() {
+  if (!result.value) return
+  const dimCols = selectedDims.value.map((key) => ({
+    key,
+    label: DIM_OPTIONS.find((o) => o.key === key)?.label ?? key,
+  }))
+  const fixedCols = [...visibleFixedColumns.value]
+  const esc = (value: string) => `"${value.replace(/"/g, '""')}"`
+  const header = [...dimCols, ...fixedCols].map((c) => c.label).concat(['운송건수'])
+  const lines = [header.map(esc).join(',')]
+  for (const row of filteredRows.value) {
+    const cells = [
+      ...dimCols.map((c) => dimValue(row, c.key)),
+      ...fixedCols.map((c) => dimValue(row, c.key)),
+      String(row.shipment_count),
+    ]
+    lines.push(cells.map(esc).join(','))
+  }
+  // BOM 포함 — 엑셀에서 한글 깨짐 없이 바로 열린다
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `route-master-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
@@ -165,6 +203,14 @@ const filteredRows = computed<RouteMasterRow[]>(() => {
       <div class="row">
         <button class="btn primary" :disabled="loading" @click="query">
           {{ loading ? '조회 중...' : '조회' }}
+        </button>
+        <button
+          class="btn"
+          :disabled="!result || !result.rows.length"
+          title="현재 열 필터가 적용된 표시 행을 CSV로 납니다 (엑셀에서 바로 열림)"
+          @click="exportCsv"
+        >
+          엑셀(CSV) 다운로드
         </button>
         <span v-if="result" class="meta">
           {{ result.total_rows.toLocaleString() }}건
@@ -219,28 +265,18 @@ const filteredRows = computed<RouteMasterRow[]>(() => {
               <th v-for="d in selectedDims" :key="d">
                 {{ DIM_OPTIONS.find((o) => o.key === d)?.label ?? d }}
               </th>
-              <th>출발코드</th>
-              <th>출발항</th>
-              <th>도착코드</th>
-              <th>도착항</th>
-              <th>최종사이트코드</th>
-              <th>최종사이트명</th>
+              <th v-for="c in visibleFixedColumns" :key="c.key">{{ c.label }}</th>
               <th class="num">운송건수</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(row, i) in filteredRows" :key="i">
               <td v-for="d in selectedDims" :key="d">{{ dimValue(row, d) }}</td>
-              <td>{{ row.dprt }}</td>
-              <td>{{ row.dprt_nm }}</td>
-              <td>{{ row.arvl }}</td>
-              <td>{{ row.arvl_nm }}</td>
-              <td>{{ row.to_stlc_cd }}</td>
-              <td>{{ row.to_stlc_nm }}</td>
+              <td v-for="c in visibleFixedColumns" :key="c.key">{{ dimValue(row, c.key) }}</td>
               <td class="num">{{ row.shipment_count.toLocaleString() }}</td>
             </tr>
             <tr v-if="!filteredRows.length">
-              <td :colspan="selectedDims.length + 7" class="empty-cell">
+              <td :colspan="selectedDims.length + visibleFixedColumns.length + 1" class="empty-cell">
                 열 필터 조건에 맞는 행이 없습니다.
               </td>
             </tr>

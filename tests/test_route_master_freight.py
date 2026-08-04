@@ -119,6 +119,18 @@ class TestRouteMaster:
         assert labels["100"] == "해상"
         assert labels["999"] == "999"  # 미등록 코드는 코드 그대로
 
+    def test_to_stlc_dims_allowed_and_deduped(self, client, mock_bl_info):
+        """최종사이트 dims는 필수 컬럼과 겹쳐도 groupby 중복 없이 동작."""
+        mock_bl_info(_bl_info_df([_info_row(trpr_no="TR1")]))
+        response = client.get(
+            "/api/routes/master",
+            params=[("dims", "to_stlc_cd"), ("dims", "to_stlc_nm")],
+        )
+        assert response.status_code == 200
+        row = response.json()["rows"][0]
+        assert row["to_stlc_cd"] == "SIKOP01"
+        assert row["to_stlc_nm"] == "코페르 물류센터"
+
     def test_company_filter_passed_as_cmpy_nm(self, client, mock_bl_info):
         mock_bl_info(_bl_info_df([_info_row()]))
         response = client.get(
