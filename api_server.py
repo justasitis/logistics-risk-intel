@@ -52,6 +52,7 @@ import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query
 
 import json
+import logging
 import os
 import re
 
@@ -123,6 +124,8 @@ app = FastAPI(
     description="B-LAP 일정 이상탐지 및 Vue 지도 대시보드 API",
 
 )
+
+logger = logging.getLogger(__name__)
 
 
  
@@ -958,7 +961,16 @@ def publish_report_snapshot() -> dict[str, Any]:
         "month": month,
         "report": report,
         "insight": insight,
+        "gap": None,
     }
+    # ETA-ATA Gap 요약도 게시본에 포함 (best-effort — 실패 시 None)
+    try:
+        from services.eta_ata_gap_service import fetch_eta_ata_gap
+
+        snapshot["gap"] = fetch_eta_ata_gap()
+    except Exception:
+        logger.exception("Gap 집계 실패 — 게시본에서 제외하고 진행")
+
     # 파일 쓰기는 atomic (tmp → os.replace)
     path = _report_snapshot_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -968,6 +980,39 @@ def publish_report_snapshot() -> dict[str, Any]:
     )
     os.replace(tmp, path)
     return snapshot
+
+
+ 
+
+@app.get("/api/anomaly/eta-ata-gap")
+def eta_ata_gap_report(
+    weeks: int = Query(default=8, ge=4, le=16),
+    refresh: bool = Query(default=False),
+) -> dict[str, Any]:
+    """ETA-ATA Gap 주차별 집계 + 추세/경고 판정 (협의체장 요구)."""
+    key = f"eta-ata-gap|{weeks}"
+    if not refresh and key in _CACHE:
+        cached_at, payload = _CACHE[key]
+        if time.time() - cached_at <= CACHE_TTL_SECONDS:
+            return {**payload, "cache_hit": True}
+
+    try:
+        from services.eta_ata_gap_service import fetch_eta_ata_gap
+
+        payload = fetch_eta_ata_gap(weeks=weeks)
+        payload = {**payload, "cache_hit": False}
+        _CACHE[key] = (time.time(), payload)
+        return payload
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "ETA-ATA Gap 집계 실패: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+        ) from exc
 
 
  

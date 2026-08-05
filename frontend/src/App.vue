@@ -40,6 +40,8 @@ import InventoryImpactPanel from '@/components/InventoryImpactPanel.vue'
 
 import LeadtimeReportPanel from '@/components/LeadtimeReportPanel.vue'
 
+import GapPanel from '@/components/GapPanel.vue'
+
 import NotificationCenter from '@/components/NotificationCenter.vue'
 
 import RouteMasterPanel from '@/components/RouteMasterPanel.vue'
@@ -240,7 +242,7 @@ type WorkspaceMode = 'dashboard' | 'mi' | 'vessel'
 
 const activeWorkspace = ref<
 
-  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'routes'
+  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'gap' | 'routes'
 
 >('dashboard')
 
@@ -2539,6 +2541,24 @@ onBeforeUnmount(() => {
           </button>
 
 
+
+          <button
+
+            type="button"
+
+            class="workspace-tab"
+
+            :class="{ active: activeWorkspace === 'gap' }"
+
+            @click="activeWorkspace = 'gap'"
+
+          >
+
+            지연 추이
+
+          </button>
+
+
  
 
           <button
@@ -3047,6 +3067,20 @@ onBeforeUnmount(() => {
     >
 
       <LeadtimeReportPanel />
+
+    </section>
+
+
+
+    <section
+
+      v-else-if="activeWorkspace === 'gap'"
+
+      class="mi-workspace-host"
+
+    >
+
+      <GapPanel />
 
     </section>
 

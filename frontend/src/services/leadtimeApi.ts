@@ -5,6 +5,7 @@ import type {
   ReportSnapshot,
   ReportSnapshotResponse,
 } from '../types/leadtime'
+import type { EtaAtaGapResponse } from '../types/gap'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -42,6 +43,10 @@ export async function publishReportSnapshot(): Promise<ReportSnapshot> {
   return parseResponse(
     await fetch(`${API_BASE}/api/report/snapshot/publish`, { method: 'POST' }),
   )
+}
+
+export async function getEtaAtaGap(): Promise<EtaAtaGapResponse> {
+  return parseResponse(await fetch(`${API_BASE}/api/anomaly/eta-ata-gap`))
 }
 
 export async function postInsightDraft(

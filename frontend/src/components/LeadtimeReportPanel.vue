@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   deleteLeadtimeOverrides,
+  getEtaAtaGap,
   getLeadtimeReport,
   getReportSnapshot,
   publishReportSnapshot,
@@ -9,6 +10,7 @@ import {
 } from '../services/leadtimeApi'
 import { getMiRegistry, getRegistryMapZones } from '../services/miRegistryApi'
 import type { RegistryMapZone } from '../services/miUpload'
+import type { EtaAtaGapResponse, GapGroupSummary } from '../types/gap'
 import type {
   InsightDraftResponse,
   LeadtimeGroup,
@@ -66,9 +68,34 @@ const canPublish = ref(false)
 const publishedMeta = ref<{ at: string; by: string } | null>(null)
 const publishing = ref(false)
 
+// ETA-ATA Gap 요약 (그룹별 배지) — 게시본에 포함되면 그것 사용
+const gapData = ref<EtaAtaGapResponse | null>(null)
+
+const GAP_LEVEL_LABELS: Record<string, string> = {
+  OK: '정상',
+  WATCH: '주의',
+  WARN: '경고',
+}
+
+const gapByGroup = computed<Map<string, GapGroupSummary>>(() => {
+  const map = new Map<string, GapGroupSummary>()
+  for (const g of gapData.value?.groups ?? []) map.set(g.group_id, g)
+  return map
+})
+
+function gapBadge(groupId: string): GapGroupSummary | null {
+  return gapByGroup.value.get(groupId) ?? null
+}
+
+function formatGapValue(value: number | null): string {
+  if (value === null) return '-'
+  return value > 0 ? `+${value}` : String(value)
+}
+
 function applySnapshot(snapshot: ReportSnapshot) {
   report.value = snapshot.report
   insight.value = snapshot.insight
+  gapData.value = snapshot.gap ?? null
   publishedMeta.value = {
     at: snapshot.published_at,
     by: snapshot.published_by,
@@ -83,11 +110,20 @@ async function load() {
     canPublish.value = snap.can_publish
     if (snap.exists && snap.snapshot) {
       applySnapshot(snap.snapshot)
+      if (!snap.snapshot.gap) {
+        // 구형 게시본(Gap 미포함)이면 Gap만 라이브 조회
+        gapData.value = await getEtaAtaGap().catch(() => null)
+      }
       return
     }
     // 게시본이 아직 없으면 라이브 집계로 폴�
     publishedMeta.value = null
-    report.value = await getLeadtimeReport()
+    const [liveReport, liveGap] = await Promise.all([
+      getLeadtimeReport(),
+      getEtaAtaGap().catch(() => null),
+    ])
+    report.value = liveReport
+    gapData.value = liveGap
   } catch (e) {
     error.value = e instanceof Error ? e.message : '리포트 조회 실패'
   } finally {
@@ -668,6 +704,15 @@ ${eventsHtml}
         <section v-for="group in section.groups" :key="group.group_id" class="panel">
         <div class="panel-head">
           <h3 class="panel-title">{{ group.name }}</h3>
+          <span
+            v-if="gapBadge(group.group_id)"
+            class="gap-badge"
+            :class="`level-${gapBadge(group.group_id)?.level.toLowerCase()}`"
+            :title="gapBadge(group.group_id)?.level_reasons.join(' · ') || 'ETA-ATA Gap 기준 이내'"
+          >
+            Gap {{ formatGapValue(gapBadge(group.group_id)?.latest_avg_gap ?? null) }}일
+            · {{ GAP_LEVEL_LABELS[gapBadge(group.group_id)?.level ?? 'OK'] }}
+          </span>
         </div>
         <div class="table-wrap">
           <table>
@@ -956,6 +1001,30 @@ ${eventsHtml}
 .panel-meta {
   font-size: 11px;
   color: var(--li-text-faint);
+}
+.gap-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.gap-badge.level-ok {
+  background: var(--li-risk-low-bg);
+  color: var(--li-risk-low);
+  border-color: var(--li-risk-low-border);
+}
+.gap-badge.level-watch {
+  background: var(--li-risk-high-bg);
+  color: var(--li-risk-high);
+  border-color: var(--li-risk-high-border);
+}
+.gap-badge.level-warn {
+  background: var(--li-risk-critical-bg);
+  color: var(--li-risk-critical);
+  border-color: var(--li-risk-critical-border);
 }
 
 /* ---------- 핵심 변동 카드 ---------- */

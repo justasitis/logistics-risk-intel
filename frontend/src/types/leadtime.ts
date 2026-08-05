@@ -69,6 +69,7 @@ export interface ReportSnapshot {
   month: string
   report: LeadtimeReport
   insight: InsightDraftResponse | null
+  gap?: import('./gap').EtaAtaGapResponse | null
 }
 
 export interface ReportSnapshotResponse {
