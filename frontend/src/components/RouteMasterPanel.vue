@@ -94,22 +94,24 @@ function dimValue(row: RouteMasterRow, key: string): string {
   return value === undefined || value === null || value === '' ? '-' : String(value)
 }
 
-// 표시 열: 선택한 구분조건(쌍 묶음은 하위 열 확장) + 도착지 기본 열
+// 표시 열: 일반 구분조건 → 출발지 쌍 → 도착지 기본 열 → 최종사이트 쌍 순
 const visibleColumns = computed<Array<{ key: string; label: string }>>(() => {
-  const cols: Array<{ key: string; label: string }> = []
+  const plain: Array<{ key: string; label: string }> = []
+  let dprtCols: Array<{ key: string; label: string }> = []
+  let stlcCols: Array<{ key: string; label: string }> = []
   for (const dim of selectedDims.value) {
-    const pair = PAIR_DIM_COLUMNS[dim]
-    if (pair) {
-      cols.push(...pair)
+    if (dim === 'dprt_pair') {
+      dprtCols = PAIR_DIM_COLUMNS[dim] ?? []
+    } else if (dim === 'to_stlc_pair') {
+      stlcCols = PAIR_DIM_COLUMNS[dim] ?? []
     } else {
-      cols.push({
+      plain.push({
         key: dim,
         label: DIM_OPTIONS.find((o) => o.key === dim)?.label ?? dim,
       })
     }
   }
-  cols.push(...BASE_COLUMNS)
-  return cols
+  return [...plain, ...dprtCols, ...BASE_COLUMNS, ...stlcCols]
 })
 
 // ---------- 컬럼별 멀티선택 필터 ----------
