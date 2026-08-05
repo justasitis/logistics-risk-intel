@@ -420,6 +420,11 @@ def map_zones(registry_file: Path | None = None) -> list[dict[str, Any]]:
         return []
     data = _load_registry(path)
 
+    # 지도 라벨(Actify 생성 간결 문구) — 없으면 프런트가 headline 폭 사용
+    from .mi_map_labels import load_map_labels
+
+    labels = load_map_labels()
+
     zones: list[dict[str, Any]] = []
     for event in data["events"]:
         if event.get("status") not in ("ACTIVE", "IMPROVING"):
@@ -439,6 +444,7 @@ def map_zones(registry_file: Path | None = None) -> list[dict[str, Any]]:
                 "headline": event.get("headline"),
                 "severity": event.get("severity"),
                 "status": event.get("status"),
+                "short_label": labels.get(str(event.get("event_id")), ""),
                 "locations": [
                     {
                         "code": loc.code,

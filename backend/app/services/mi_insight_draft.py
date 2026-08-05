@@ -256,6 +256,16 @@ def generate_insight_draft(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
         },
     )
+
+    # 지도 라벨(간결 문구) 갱신 — best-effort. 실패필도 초안 생성은 성공으로 유지.
+    try:
+        from . import mi_event_registry
+        from .mi_map_labels import generate_map_labels
+
+        generate_map_labels(mi_event_registry.list_events().get("events", []))
+    except Exception:
+        logger.exception("지도 라벨 생성 실패 — 생략하고 진행")
+
     return {**record, "regenerated": True}
 
 

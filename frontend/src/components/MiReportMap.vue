@@ -83,13 +83,12 @@ const DEFAULT_ZONE_COLOR = '#06b6d4'
 
 interface ZoneCircle {
   key: string
+  eventId: string
   cx: number
   cy: number
   r: number
   color: string
   active: boolean
-  label: string
-  headline: string
   severity: string
   inView: boolean
 }
@@ -104,13 +103,12 @@ const zoneCircles = computed<ZoneCircle[]>(() =>
       const cy = y(loc.lat)
       return {
         key: `${zone.event_id}|${loc.code}`,
+        eventId: zone.event_id,
         cx,
         cy,
         r,
         color,
         active: zone.status === 'ACTIVE',
-        label: loc.name,
-        headline: zone.headline,
         severity: zone.severity,
         inView: cx > -r && cx < W + r && cy > -r && cy < H + r,
       }
@@ -119,6 +117,123 @@ const zoneCircles = computed<ZoneCircle[]>(() =>
 )
 
 const visibleZones = computed(() => zoneCircles.value.filter((z) => z.inView))
+
+// ---------- 이벤트 라벨 박스 (겹침 방지 배치) ----------
+const SEVERITY_RANK: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+}
+const LABEL_H = 22
+// 앵커 주변 후보 방향 (오른쪽 우선)과 점진적 간격
+const LABEL_DIRS: Array<[number, number]> = [
+  [1, 0], [1, -0.8], [1, 0.8], [-1, 0], [-1, -0.8], [-1, 0.8], [0, -1], [0, 1],
+]
+const LABEL_GAPS = [8, 18, 32, 50, 72, 100]
+
+/** 라벨 문구 — Actify 간결 문구 우선, 없으면 headline 앞부분 폭 */
+function labelText(zone: RegistryMapZone | undefined): string {
+  const short = (zone?.short_label ?? '').trim()
+  if (short) return short
+  const headline = (zone?.headline ?? '').trim()
+  return headline.length > 18 ? `${headline.slice(0, 18)}…` : headline
+}
+
+/** 텍스트 폭 근사 (한글 11.5px, 그 외 6.6px) + 좌우 패딩 */
+function estimateWidth(text: string): number {
+  let w = 0
+  for (const ch of text) w += /[가-힣]/.test(ch) ? 11.5 : 6.6
+  return Math.ceil(w) + 18
+}
+
+interface LabelRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+function rectsOverlap(a: LabelRect, b: LabelRect, pad: number): boolean {
+  return (
+    a.x - pad < b.x + b.w
+    && a.x + a.w + pad > b.x
+    && a.y - pad < b.y + b.h
+    && a.y + a.h + pad > b.y
+  )
+}
+
+interface LabelBox extends LabelRect {
+  key: string
+  text: string
+  color: string
+  anchorX: number
+  anchorY: number
+}
+
+const labelBoxes = computed<LabelBox[]>(() => {
+  const zoneByEvent = new Map(props.zones.map((z) => [z.event_id, z]))
+  const byEvent = new Map<string, ZoneCircle[]>()
+  for (const circle of visibleZones.value) {
+    if (!byEvent.has(circle.eventId)) byEvent.set(circle.eventId, [])
+    byEvent.get(circle.eventId)?.push(circle)
+  }
+  const items = [...byEvent.entries()]
+    .map(([eventId, circles]) => {
+      const anchor = circles.reduce((a, b) => (b.r > a.r ? b : a))
+      return {
+        key: eventId,
+        text: labelText(zoneByEvent.get(eventId)),
+        color: anchor.color,
+        ax: anchor.cx,
+        ay: anchor.cy,
+        r: anchor.r,
+        rank: SEVERITY_RANK[anchor.severity?.toUpperCase() ?? ''] ?? 4,
+      }
+    })
+    .sort((a, b) => a.rank - b.rank)  // 심각도 높은 것부터 자리 배정
+
+  const placed: LabelRect[] = []
+  const out: LabelBox[] = []
+  for (const item of items) {
+    if (!item.text) continue
+    const w = estimateWidth(item.text)
+    let chosen: LabelRect | null = null
+    outer:
+    for (const gap of LABEL_GAPS) {
+      for (const [dx, dy] of LABEL_DIRS) {
+        let bx = dx > 0
+          ? item.ax + item.r + gap
+          : dx < 0
+            ? item.ax - item.r - gap - w
+            : item.ax - w / 2
+        let by = dy < 0
+          ? item.ay - item.r - gap - LABEL_H
+          : dy > 0
+            ? item.ay + item.r + gap
+            : item.ay - LABEL_H / 2
+        bx = Math.max(4, Math.min(W - 4 - w, bx))
+        by = Math.max(4, Math.min(H - 4 - LABEL_H, by))
+        const rect = { x: bx, y: by, w, h: LABEL_H }
+        if (!placed.some((p) => rectsOverlap(p, rect, 3))) {
+          chosen = rect
+          break outer
+        }
+      }
+    }
+    if (!chosen) continue  // 어디에도 못 놓으면 생략 — 겹침 방지 우선
+    placed.push(chosen)
+    out.push({
+      key: item.key,
+      text: item.text,
+      color: item.color,
+      anchorX: item.ax,
+      anchorY: item.ay,
+      ...chosen,
+    })
+  }
+  return out
+})
 
 const legendSeverities = computed(() => {
   const seen = new Map<string, string>()
@@ -202,8 +317,25 @@ defineExpose({ getSvgHtml })
               class="zone-ring"
             />
             <circle :cx="z.cx" :cy="z.cy" r="3.5" :fill="z.color" stroke="#fff" stroke-width="1.4" />
-            <text :x="z.cx + 7" :y="z.cy - 7" class="zone-label">{{ z.label }}</text>
-            <title>{{ z.headline }} ({{ z.severity }})</title>
+          </g>
+
+          <g v-for="b in labelBoxes" :key="`label-${b.key}`">
+            <line
+              :x1="b.anchorX"
+              :y1="b.anchorY"
+              :x2="b.anchorX < b.x ? b.x : b.x + b.w"
+              :y2="b.y + b.h / 2"
+              :stroke="b.color"
+              class="label-link"
+            />
+            <rect
+              :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="7"
+              :stroke="b.color"
+              class="label-box"
+            />
+            <text :x="b.x + 9" :y="b.y + b.h / 2 + 3.5" class="label-text" :fill="b.color">
+              {{ b.text }}
+            </text>
           </g>
         </g>
       </svg>
@@ -305,13 +437,18 @@ defineExpose({ getSvgHtml })
 .zone-ring {
   opacity: 0.85;
 }
-.zone-label {
-  font-size: 12px;
+.label-box {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke-width: 1.2;
+}
+.label-text {
+  font-size: 11px;
   font-weight: 700;
-  fill: var(--li-text-soft);
-  paint-order: stroke;
-  stroke: rgba(255, 255, 255, 0.85);
-  stroke-width: 3px;
+}
+.label-link {
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
 }
 .map-footer {
   margin-top: 10px;

@@ -125,6 +125,11 @@ def test_generate_draft_success(run_store, monkeypatch):
             "R", (), {"answer": VALID_ANSWER, "conversation_id": ""}
         )(),
     )
+    # 지도 라벨 생성 훅 — 실제 Actify 호출 방지
+    monkeypatch.setattr(
+        "backend.app.services.mi_map_labels.generate_map_labels",
+        lambda events: {},
+    )
     result = svc.generate_insight_draft(month="2026-07", include_leadtime=True)
     assert result["month"] == "2026-07"
     assert len(result["draft"]["sections"]) == 2
@@ -132,6 +137,31 @@ def test_generate_draft_success(run_store, monkeypatch):
     assert result["draft"]["monitoring_points"] == ["홍해 동향"]
     summary = result["materials_summary"]
     assert summary == {"events_used": 2, "leadtime_used": True, "summary_used": True}
+
+
+def test_generate_draft_triggers_map_label_refresh(run_store, monkeypatch):
+    """초안 생성 성공 시 지도 라벨 갱신 훅이 레지스트리 이벤트로 호출된다."""
+    _set_actify_env(monkeypatch)
+    monkeypatch.setattr(svc, "collect_leadtime_highlights", lambda month: None)
+    monkeypatch.setattr(svc, "collect_schedule_summary", lambda: None)
+    monkeypatch.setattr(
+        svc.ActifyClient,
+        "call",
+        lambda self, prompt, conversation_id="": type(
+            "R", (), {"answer": VALID_ANSWER, "conversation_id": ""}
+        )(),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.mi_event_registry.list_events",
+        lambda **kw: {"events": [{"event_id": "EV-9", "status": "ACTIVE"}]},
+    )
+    calls: list[list] = []
+    monkeypatch.setattr(
+        "backend.app.services.mi_map_labels.generate_map_labels",
+        lambda events: calls.append(events) or {},
+    )
+    svc.generate_insight_draft(month="2026-07")
+    assert calls == [[{"event_id": "EV-9", "status": "ACTIVE"}]]
 
 
 def test_generate_draft_legacy_response_without_key_changes(run_store, monkeypatch):
@@ -145,6 +175,10 @@ def test_generate_draft_legacy_response_without_key_changes(run_store, monkeypat
         lambda self, prompt, conversation_id="": type(
             "R", (), {"answer": LEGACY_ANSWER, "conversation_id": ""}
         )(),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.mi_map_labels.generate_map_labels",
+        lambda events: {},
     )
     result = svc.generate_insight_draft(month="2026-07", include_leadtime=False)
     assert result["draft"]["key_changes"] == []

@@ -34,6 +34,7 @@ FAKE_REPORT = {
 def sharepoint_root(tmp_path, monkeypatch):
     """SharePoint 루트 격리 + 리드타임/override는 fake로."""
     root = tmp_path / "LogisticsRisk"
+    root.mkdir(parents=True)  # resolve_synced_path의 이름 치환 방지 (존재하면 그대로 사용)
     monkeypatch.setenv("MARINESIA_SHAREPOINT_ROOT", str(root))
     monkeypatch.setenv("INSIGHT_DRAFT_STORE_DIR", str(tmp_path / "drafts"))
     marinesia_settings.get_marinesia_settings.cache_clear()

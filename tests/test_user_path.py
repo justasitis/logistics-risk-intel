@@ -83,7 +83,12 @@ class TestResolveSyncedPath:
         result = resolve_synced_path(configured)
         assert "SK on - LogisticsRisk" in result
 
-    def test_not_found_returns_original(self, tmp_path):
+    def test_not_found_returns_original(self, tmp_path, monkeypatch):
+        # 실제 PC 홈 폴터의 동기화 폴터에 오염되지 않도록 home을 격리
+        monkeypatch.setattr(
+            user_path.Path, "home",
+            classmethod(lambda cls: tmp_path / "no-home"),
+        )
         configured = str(
             tmp_path / "user" / "SK on" / "Global물류팀 - LogisticsRisk"
         )

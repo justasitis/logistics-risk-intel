@@ -461,6 +461,7 @@ export interface RegistryMapZone {
   headline: string
   severity: string
   status: string
+  short_label?: string // Actify 생성 간결 문구 (없으면 headline 폭)
   locations: Array<{
     code: string
     name: string

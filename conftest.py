@@ -48,6 +48,28 @@ def _block_external_http(request, monkeypatch):
         pass
 
 
+@pytest.fixture(autouse=True)
+def _isolate_sharepoint_root(tmp_path, monkeypatch):
+    """SharePoint 루트를 격리 — 테스트가 실제 동기화 폴터를 건드리지 않도록.
+
+    기본 루트(C:\\Users\\<user>\\SK on\\M365_TtNUJmLE - 데이터_접근금지)가
+    개발 PC에 실재하므로, 환경변수 미설정 테스트가 실제 폴터에 쓰는 사고를 막는다.
+    개별 테스트가 MARINESIA_SHAREPOINT_ROOT를 직접 설정하면 그 값이 우선한다
+    (이 fixture는 설정돼 있지 않을 때만 기본값을 덮어쓴다).
+    """
+    import os
+
+    from backend.app.core import marinesia_settings
+
+    if not os.environ.get("MARINESIA_SHAREPOINT_ROOT"):
+        monkeypatch.setenv(
+            "MARINESIA_SHAREPOINT_ROOT", str(tmp_path / "sp_root"),
+        )
+    marinesia_settings.get_marinesia_settings.cache_clear()
+    yield
+    marinesia_settings.get_marinesia_settings.cache_clear()
+
+
 @pytest.fixture
 def data_dir(tmp_path):
     """테스트용 임시 데이터 디렉터리."""
