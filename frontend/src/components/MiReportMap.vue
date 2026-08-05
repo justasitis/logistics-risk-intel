@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import worldLand from '../assets/world-land.json'
 import type { RegistryMapZone } from '../services/miUpload'
 
@@ -21,6 +21,7 @@ const REGIONS: Region[] = [
   { key: 'europe', label: '유럽 · 수에즈', bbox: [-14, 8, 66, 62] },
   { key: 'med', label: '지중해 · 아드리아', bbox: [-8, 28, 40, 48] },
   { key: 'us_east', label: '미주 동안', bbox: [-102, 8, -56, 56] },
+  { key: 'us_west', label: '미주 서안', bbox: [-132, 22, -108, 56] },
   { key: 'asia', label: '아시아', bbox: [94, 10, 150, 54] },
 ]
 
@@ -84,6 +85,7 @@ const DEFAULT_ZONE_COLOR = '#06b6d4'
 interface ZoneCircle {
   key: string
   eventId: string
+  name: string
   cx: number
   cy: number
   r: number
@@ -104,6 +106,7 @@ const zoneCircles = computed<ZoneCircle[]>(() =>
       return {
         key: `${zone.event_id}|${loc.code}`,
         eventId: zone.event_id,
+        name: loc.name,
         cx,
         cy,
         r,
@@ -118,33 +121,27 @@ const zoneCircles = computed<ZoneCircle[]>(() =>
 
 const visibleZones = computed(() => zoneCircles.value.filter((z) => z.inView))
 
-// ---------- 이벤트 라벨 박스 (겹침 방지 배치) ----------
-const SEVERITY_RANK: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-}
-const LABEL_H = 22
+// ---------- 클릭 팝업 (동그라미당 하나, X/일괄 닫기) ----------
 // 앵커 주변 후보 방향 (오른쪽 우선)과 점진적 간격
 const LABEL_DIRS: Array<[number, number]> = [
   [1, 0], [1, -0.8], [1, 0.8], [-1, 0], [-1, -0.8], [-1, 0.8], [0, -1], [0, 1],
 ]
 const LABEL_GAPS = [8, 18, 32, 50, 72, 100]
+const POPUP_H = 38
 
 /** 라벨 문구 — Actify 간결 문구 우선, 없으면 headline 앞부분 폭 */
 function labelText(zone: RegistryMapZone | undefined): string {
   const short = (zone?.short_label ?? '').trim()
   if (short) return short
   const headline = (zone?.headline ?? '').trim()
-  return headline.length > 18 ? `${headline.slice(0, 18)}…` : headline
+  return headline.length > 22 ? `${headline.slice(0, 22)}…` : headline
 }
 
-/** 텍스트 폭 근사 (한글 11.5px, 그 외 6.6px) + 좌우 패딩 */
+/** 텍스트 폭 근사 (한글 11.5px, 그 외 6.6px) + 좌우 패딩·닫기 버튼 영역 */
 function estimateWidth(text: string): number {
   let w = 0
   for (const ch of text) w += /[가-힣]/.test(ch) ? 11.5 : 6.6
-  return Math.ceil(w) + 18
+  return Math.ceil(w) + 30
 }
 
 interface LabelRect {
@@ -163,73 +160,83 @@ function rectsOverlap(a: LabelRect, b: LabelRect, pad: number): boolean {
   )
 }
 
-interface LabelBox extends LabelRect {
+const openPopups = ref<string[]>([])
+
+function togglePopup(key: string): void {
+  const idx = openPopups.value.indexOf(key)
+  if (idx >= 0) openPopups.value.splice(idx, 1)
+  else openPopups.value.push(key)
+}
+
+function closePopup(key: string): void {
+  openPopups.value = openPopups.value.filter((k) => k !== key)
+}
+
+function closeAllPopups(): void {
+  openPopups.value = []
+}
+
+// 권역 변경 시 좌표가 달라지므로 열린 팝업 초기화
+watch(activeRegion, closeAllPopups)
+
+interface PopupBox extends LabelRect {
   key: string
-  text: string
+  title: string
+  sub: string
   color: string
   anchorX: number
   anchorY: number
 }
 
-const labelBoxes = computed<LabelBox[]>(() => {
+const popupBoxes = computed<PopupBox[]>(() => {
   const zoneByEvent = new Map(props.zones.map((z) => [z.event_id, z]))
-  const byEvent = new Map<string, ZoneCircle[]>()
-  for (const circle of visibleZones.value) {
-    if (!byEvent.has(circle.eventId)) byEvent.set(circle.eventId, [])
-    byEvent.get(circle.eventId)?.push(circle)
-  }
-  const items = [...byEvent.entries()]
-    .map(([eventId, circles]) => {
-      const anchor = circles.reduce((a, b) => (b.r > a.r ? b : a))
-      return {
-        key: eventId,
-        text: labelText(zoneByEvent.get(eventId)),
-        color: anchor.color,
-        ax: anchor.cx,
-        ay: anchor.cy,
-        r: anchor.r,
-        rank: SEVERITY_RANK[anchor.severity?.toUpperCase() ?? ''] ?? 4,
-      }
-    })
-    .sort((a, b) => a.rank - b.rank)  // 심각도 높은 것부터 자리 배정
-
+  const circleByKey = new Map(visibleZones.value.map((c) => [c.key, c]))
   const placed: LabelRect[] = []
-  const out: LabelBox[] = []
-  for (const item of items) {
-    if (!item.text) continue
-    const w = estimateWidth(item.text)
+  const out: PopupBox[] = []
+  for (const key of openPopups.value) {
+    const circle = circleByKey.get(key)
+    if (!circle) continue
+    const zone = zoneByEvent.get(circle.eventId)
+    const title = labelText(zone)
+    const sub = `${circle.name} · ${circle.severity} · ${circle.active ? '진행 중' : '완화'}`
+    const w = Math.max(estimateWidth(title), estimateWidth(sub))
+    // 이미 열린 팝업과 겹치지 않는 첫 자리 탐색, 없으면 첫 후보에 배치
     let chosen: LabelRect | null = null
+    let fallback: LabelRect | null = null
     outer:
     for (const gap of LABEL_GAPS) {
       for (const [dx, dy] of LABEL_DIRS) {
         let bx = dx > 0
-          ? item.ax + item.r + gap
+          ? circle.cx + circle.r + gap
           : dx < 0
-            ? item.ax - item.r - gap - w
-            : item.ax - w / 2
+            ? circle.cx - circle.r - gap - w
+            : circle.cx - w / 2
         let by = dy < 0
-          ? item.ay - item.r - gap - LABEL_H
+          ? circle.cy - circle.r - gap - POPUP_H
           : dy > 0
-            ? item.ay + item.r + gap
-            : item.ay - LABEL_H / 2
+            ? circle.cy + circle.r + gap
+            : circle.cy - POPUP_H / 2
         bx = Math.max(4, Math.min(W - 4 - w, bx))
-        by = Math.max(4, Math.min(H - 4 - LABEL_H, by))
-        const rect = { x: bx, y: by, w, h: LABEL_H }
+        by = Math.max(4, Math.min(H - 4 - POPUP_H, by))
+        const rect = { x: bx, y: by, w, h: POPUP_H }
+        if (!fallback) fallback = rect
         if (!placed.some((p) => rectsOverlap(p, rect, 3))) {
           chosen = rect
           break outer
         }
       }
     }
-    if (!chosen) continue  // 어디에도 못 놓으면 생략 — 겹침 방지 우선
-    placed.push(chosen)
+    const rect = chosen ?? fallback
+    if (!rect) continue
+    placed.push(rect)
     out.push({
-      key: item.key,
-      text: item.text,
-      color: item.color,
-      anchorX: item.ax,
-      anchorY: item.ay,
-      ...chosen,
+      key,
+      title,
+      sub,
+      color: circle.color,
+      anchorX: circle.cx,
+      anchorY: circle.cy,
+      ...rect,
     })
   }
   return out
@@ -308,7 +315,12 @@ defineExpose({ getSvgHtml })
 
           <path :d="landPath" class="land" />
 
-          <g v-for="z in visibleZones" :key="z.key">
+          <g
+            v-for="z in visibleZones"
+            :key="z.key"
+            class="zone-clickable"
+            @click="togglePopup(z.key)"
+          >
             <circle :cx="z.cx" :cy="z.cy" :r="z.r" :fill="z.color" class="zone-fill" />
             <circle
               :cx="z.cx" :cy="z.cy" :r="z.r" fill="none"
@@ -319,23 +331,28 @@ defineExpose({ getSvgHtml })
             <circle :cx="z.cx" :cy="z.cy" r="3.5" :fill="z.color" stroke="#fff" stroke-width="1.4" />
           </g>
 
-          <g v-for="b in labelBoxes" :key="`label-${b.key}`">
+          <g v-for="b in popupBoxes" :key="`popup-${b.key}`">
             <line
               :x1="b.anchorX"
               :y1="b.anchorY"
               :x2="b.anchorX < b.x ? b.x : b.x + b.w"
               :y2="b.y + b.h / 2"
               :stroke="b.color"
-              class="label-link"
+              class="popup-link"
             />
             <rect
-              :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="7"
+              :x="b.x" :y="b.y" :width="b.w" :height="b.h" rx="8"
               :stroke="b.color"
-              class="label-box"
+              class="popup-box"
             />
-            <text :x="b.x + 9" :y="b.y + b.h / 2 + 3.5" class="label-text" :fill="b.color">
-              {{ b.text }}
+            <text :x="b.x + 9" :y="b.y + 15" class="popup-title" :fill="b.color">
+              {{ b.title }}
             </text>
+            <text :x="b.x + 9" :y="b.y + 29" class="popup-sub">{{ b.sub }}</text>
+            <g class="popup-close" @click.stop="closePopup(b.key)">
+              <rect :x="b.x + b.w - 19" :y="b.y + 5" width="14" height="14" rx="4" class="popup-close-bg" />
+              <text :x="b.x + b.w - 12" :y="b.y + 15.5" class="popup-close-x">×</text>
+            </g>
           </g>
         </g>
       </svg>
@@ -351,8 +368,19 @@ defineExpose({ getSvgHtml })
           <span class="legend-dot solid-demo"></span>
           진행 중(실선) / 완화·해소(점선)
         </span>
+        <span class="legend-item">동그라미 클릭 시 이벤트 팝업</span>
       </div>
-      <span class="region-note">{{ region.label }} 기준 · 이벤트 {{ visibleZones.length }}개 영향권</span>
+      <div class="footer-right">
+        <span class="region-note">{{ region.label }} 기준 · 이벤트 {{ visibleZones.length }}개 영향권</span>
+        <button
+          v-if="openPopups.length"
+          type="button"
+          class="close-all"
+          @click="closeAllPopups"
+        >
+          팝업 일괄 닫기 ({{ openPopups.length }})
+        </button>
+      </div>
     </div>
   </section>
 </template>
@@ -437,18 +465,59 @@ defineExpose({ getSvgHtml })
 .zone-ring {
   opacity: 0.85;
 }
-.label-box {
-  fill: rgba(255, 255, 255, 0.94);
+.zone-clickable {
+  cursor: pointer;
+}
+.popup-box {
+  fill: rgba(255, 255, 255, 0.95);
   stroke-width: 1.2;
 }
-.label-text {
+.popup-title {
   font-size: 11px;
   font-weight: 700;
 }
-.label-link {
+.popup-sub {
+  font-size: 11px;
+  fill: var(--li-text-muted);
+}
+.popup-link {
   stroke-width: 1;
   stroke-dasharray: 2 2;
   opacity: 0.7;
+}
+.popup-close {
+  cursor: pointer;
+}
+.popup-close-bg {
+  fill: var(--li-bg-app-2);
+  stroke: var(--li-border);
+}
+.popup-close:hover .popup-close-bg {
+  fill: var(--li-risk-critical-bg);
+}
+.popup-close-x {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--li-text-muted);
+  text-anchor: middle;
+}
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.close-all {
+  padding: 4px 12px;
+  border: 1px solid var(--li-border);
+  border-radius: 999px;
+  background: var(--li-surface-strong);
+  color: var(--li-text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.close-all:hover {
+  background: var(--li-surface-blue);
 }
 .map-footer {
   margin-top: 10px;

@@ -529,9 +529,10 @@ td.headline{text-align:left}
 .chart-box{flex:1;min-width:320px}
 .graticule line{stroke:rgba(37,99,235,.09);stroke-width:1}
 .grid-line{stroke:rgba(16,42,67,.11);stroke-width:1;stroke-dasharray:3 4}
-.label-box{fill:rgba(255,255,255,.94);stroke-width:1.2}
-.label-text{font-size:11px;font-weight:700}
-.label-link{stroke-width:1;stroke-dasharray:2 2;opacity:.7}
+.label-box,.popup-box{fill:rgba(255,255,255,.95);stroke-width:1.2}
+.label-text,.popup-title{font-size:11px;font-weight:700}
+.popup-sub{font-size:11px;fill:#607086}
+.label-link,.popup-link{stroke-width:1;stroke-dasharray:2 2;opacity:.7}
 .land{fill:#c9dcec;stroke:rgba(255,255,255,.9);stroke-width:.6}
 .zone-fill{opacity:.16}
 .zone-ring{opacity:.85}
