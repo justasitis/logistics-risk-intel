@@ -13,6 +13,8 @@
 1. 재료에 없는 사실, 수치, 선사명, 날짜를 만들지 마십시오. 수치는 제공된 재료만 사용합니다.
 2. 재료가 부족한 섹션은 "해당 월 집계 재료 부족"이라고 명시하고 억지로 채우지 마십시오.
 3. 각 섹션 본문(body)은 한국어 2~5문장, 실무자 보고체(개조식 혼용 가능).
+   sea_europe/sea_americas/sea_asia/key_events/leadtime_trend 5개 섹션은 항상 포함하고,
+   재료가 부족한 섹션은 규칙 2에 따라 "재료 부족"을 명시한다.
 4. key_changes는 그 달의 가장 중요한 변화 최대 3개를 한 문장씩 요약한 것으로,
    리포트 최상단 Executive Summary에 그대로 노출된다. 수치·회랑명 등 구체적 근거를 포함하십시오.
 5. 재료 중 항공(AIR) 관련 이벤트가 하나라도 있으면 sections에 "air_outlook" 섹션을
@@ -28,6 +30,7 @@ JSON만 반환하십시오.
   "sections": [
     {"key": "sea_europe", "title": "유럽 권역 동향", "body": "..."},
     {"key": "sea_americas", "title": "미주 권역 동향", "body": "..."},
+    {"key": "sea_asia", "title": "아시아 권역 동향", "body": "..."},
     {"key": "key_events", "title": "주요 이벤트", "body": "..."},
     {"key": "leadtime_trend", "title": "리드타임 동향", "body": "..."},
     {"key": "air_outlook", "title": "[항공] 향후 전망 및 특이사항", "body": "..."}
