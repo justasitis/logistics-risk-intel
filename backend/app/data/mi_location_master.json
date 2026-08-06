@@ -55,6 +55,32 @@
     "default_radius_km": 300,
     "aliases": ["희망봉"]
   },
+  "CN_COAST_NORTH": {
+    "name": "North China Coastal Waters",
+    "location_type": "SEA_AREA",
+    "lat": 33.5,
+    "lon": 122.5,
+    "default_radius_km": 450,
+    "aliases": [
+      "North China coastal waters",
+      "북중국 연안",
+      "북중국 연안 해역",
+      "황해"
+    ]
+  },
+  "CN_COAST_SOUTH": {
+    "name": "South China Coastal Waters",
+    "location_type": "SEA_AREA",
+    "lat": 23.0,
+    "lon": 117.5,
+    "default_radius_km": 450,
+    "aliases": [
+      "South China coastal waters",
+      "남중국 연안",
+      "남중국 연안 해역",
+      "남중국해"
+    ]
+  },
   "ICN": {
     "name": "Incheon International Airport",
     "location_type": "AIRPORT",
