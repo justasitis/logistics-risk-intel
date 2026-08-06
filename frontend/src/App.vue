@@ -38,7 +38,7 @@ import InventoryImpactPanel from '@/components/InventoryImpactPanel.vue'
 
 import LeadtimeReportPanel from '@/components/LeadtimeReportPanel.vue'
 
-import GapPanel from '@/components/GapPanel.vue'
+import DelayDecompositionPanel from '@/components/DelayDecompositionPanel.vue'
 
 import NotificationCenter from '@/components/NotificationCenter.vue'
 
@@ -3070,7 +3070,7 @@ onBeforeUnmount(() => {
 
     >
 
-      <GapPanel />
+      <DelayDecompositionPanel />
 
     </section>
 
