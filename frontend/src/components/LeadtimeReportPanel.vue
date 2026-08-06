@@ -335,53 +335,14 @@ const regionSections = computed<RegionSection[]>(() => {
 
 // ---------- KPI 요약 카드 ----------
 interface KpiSummary {
-  avgLt: number | null // 최신 실적 월 전 항로 평균 해상 L/T
-  avgDelta: number | null // 전월 대비 평균 변동 (행별 delta의 평균)
-  upCount: number
-  downCount: number
   activeEvents: number
   topChange: MomHighlight | null
 }
 
-const kpis = computed<KpiSummary>(() => {
-  const empty: KpiSummary = {
-    avgLt: null,
-    avgDelta: null,
-    upCount: 0,
-    downCount: 0,
-    activeEvents: registryEvents.value.filter((e) => e.status === 'ACTIVE').length,
-    topChange: null,
-  }
-  const r = report.value
-  if (!r) return empty
-  const actualCols = r.month_columns.filter((c) => c.kind === 'actual')
-  const latestCol = actualCols[actualCols.length - 1]
-  if (!latestCol) return empty
-  const latest = latestCol.key
-  const values: number[] = []
-  const deltas: number[] = []
-  for (const group of r.groups) {
-    for (const block of countryBlocks(group)) {
-      if (block.fixed) continue
-      const row = block.rowsByStat.Avg
-      const current = row?.cells[latest]
-      if (current === undefined || current === null) continue
-      values.push(current)
-      const delta = cellDelta(row, latest)
-      if (delta !== null) deltas.push(delta)
-    }
-  }
-  const mean = (xs: number[]) =>
-    xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null
-  return {
-    avgLt: mean(values),
-    avgDelta: deltas.length ? mean(deltas) : null,
-    upCount: deltas.filter((d) => d > 0).length,
-    downCount: deltas.filter((d) => d < 0).length,
-    activeEvents: empty.activeEvents,
-    topChange: momHighlights.value[0] ?? null,
-  }
-})
+const kpis = computed<KpiSummary>(() => ({
+  activeEvents: registryEvents.value.filter((e) => e.status === 'ACTIVE').length,
+  topChange: momHighlights.value[0] ?? null,
+}))
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -460,9 +421,7 @@ ${sectionsHtml}
         .join('')}</div>`
     : ''
   const kpiHtml = `<div class="kpi-grid">
-<div class="card kpi kpi-blue"><div class="kpi-label">전 항로 평균 해상 L/T (${escapeHtml(highlightMonthLabel.value)})</div><div class="kpi-value">${k.avgLt ?? '-'}<span class="kpi-unit">일</span></div><div class="kpi-sub ${k.avgDelta === null ? '' : k.avgDelta > 0 ? 'up' : 'down'}">${k.avgDelta === null ? '' : `전월 대비 ${k.avgDelta > 0 ? '▲' : '▼'}${Math.abs(k.avgDelta)}`}</div></div>
 <div class="card kpi"><div class="kpi-label">최대 변동 항로</div><div class="kpi-value kpi-text">${k.topChange ? escapeHtml(k.topChange.label) : '-'}</div><div class="kpi-sub ${k.topChange && k.topChange.delta > 0 ? 'up' : 'down'}">${k.topChange ? `전월 대비 ${k.topChange.delta > 0 ? '▲' : '▼'}${Math.abs(k.topChange.delta)}` : ''}</div></div>
-<div class="card kpi"><div class="kpi-label">상승 / 하락 항로</div><div class="kpi-value">${k.upCount}<span class="kpi-unit">/ ${k.upCount + k.downCount}</span></div><div class="kpi-sub">리드타임 상승 항로 수</div></div>
 <div class="card kpi ${k.activeEvents > 0 ? 'kpi-warn' : ''}"><div class="kpi-label">진행 중 MI 이벤트</div><div class="kpi-value">${k.activeEvents}<span class="kpi-unit">건</span></div><div class="kpi-sub">이벤트 레지스트리 기준</div></div>
 </div>`
   const eventsHtml = sortedRegistryEvents.value.length
@@ -482,7 +441,7 @@ body{font-family:'Malgun Gothic','Pretendard',sans-serif;margin:0;padding:32px;c
 h2{font-size:14px;margin:0 0 10px;color:#122033}
 h3{font-size:12px;margin:14px 0 6px;color:#344861}
 .card{background:rgba(255,255,255,.92);border:1px solid rgba(16,42,67,.11);border-radius:14px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,32,54,.08);margin-top:14px}
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
 .kpi{margin-top:0;min-height:96px}
 .kpi-blue{background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(6,182,212,.16)),rgba(255,255,255,.92)}
 .kpi-warn{border-color:rgba(249,115,22,.34);background:rgba(249,115,22,.08)}
@@ -631,19 +590,6 @@ ${eventsHtml}
 
     <template v-if="report">
       <div class="kpi-grid">
-        <div class="kpi-card kpi-blue">
-          <div class="kpi-label">전 항로 평균 해상 L/T ({{ highlightMonthLabel }})</div>
-          <div class="kpi-value">
-            {{ kpis.avgLt ?? '-' }}<span class="kpi-unit">일</span>
-          </div>
-          <div
-            v-if="kpis.avgDelta !== null"
-            class="kpi-sub"
-            :class="kpis.avgDelta > 0 ? 'up' : 'down'"
-          >
-            전월 대비 {{ formatDelta(kpis.avgDelta) }}
-          </div>
-        </div>
         <div class="kpi-card">
           <div class="kpi-label">최대 변동 항로</div>
           <div class="kpi-value kpi-text">{{ kpis.topChange?.label ?? '-' }}</div>
@@ -654,13 +600,6 @@ ${eventsHtml}
           >
             전월 대비 {{ formatDelta(kpis.topChange.delta) }}
           </div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">상승 / 하락 항로</div>
-          <div class="kpi-value">
-            {{ kpis.upCount }}<span class="kpi-unit">/ {{ kpis.upCount + kpis.downCount }}</span>
-          </div>
-          <div class="kpi-sub">리드타임 상승 항로 수 (전월 대비)</div>
         </div>
         <div class="kpi-card" :class="{ 'kpi-warn': kpis.activeEvents > 0 }">
           <div class="kpi-label">진행 중 MI 이벤트</div>
@@ -905,7 +844,7 @@ ${eventsHtml}
 /* ---------- KPI 카드 ---------- */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 @media (max-width: 980px) {
