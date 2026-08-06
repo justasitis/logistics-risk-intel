@@ -54,6 +54,7 @@ severity 판정 시 직접 통과 여부뿐 아니라 다음 2차 효과를 반�
 - 위도·경도는 절대 출력하지 않습니다.
 - 적절한 code가 없으면 code는 빈 문자열로 두고 name을 기록합니다.
 - 기사에서 비교·비유로만 언급된 위치(예: '호륬무즈에 비견될 파급력')는 location_refs에 포함하지 마십시오. location_refs는 실제 영향 해역만 포함합니다.
+- 중국 연안 관련 위험은 'China Coastal Waters'처럼 통칭하지 말고 반드시 북중국 연안(CN_COAST_NORTH)과 남중국 연안(CN_COAST_SOUTH)으로 구분해 명시하십시오. 기사상 구분이 모호하면 영향이 큰 쪽 하나를 고르고 summary에 그 근거를 밝히십시오.
 - radius_km는 특별한 사유가 없으면 allowed_location_master의 default_radius_km를 그대로 사용하십시오.
 
 ## 분석·권장 조치 규칙
