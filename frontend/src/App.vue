@@ -48,6 +48,8 @@ import RouteMasterPanel from '@/components/RouteMasterPanel.vue'
 
 import { getRegistryMapZones } from '@/services/miRegistryApi'
 
+import { getCurrentUser } from '@/services/currentUser'
+
 import {
   buildRegistryZoneGeoJson,
   type RegistryMapZone,
@@ -245,6 +247,27 @@ const activeWorkspace = ref<
   'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'gap' | 'routes'
 
 >('dashboard')
+
+// 외부 MI 정제 탭 관리 권한 — 서버(/api/me)가 REPORT_PUBLISH_USERS 기준으로 판정
+const canManageMi = ref(false)
+
+async function loadCurrentUser() {
+
+  try {
+
+    const me = await getCurrentUser()
+
+    canManageMi.value = me.can_manage_mi
+
+  } catch {
+
+    // 권한 조회 실패 시 탭을 숨긴다 (fail-closed)
+
+    canManageMi.value = false
+
+  }
+
+}
 
 const now = ref(new Date())
 
@@ -2366,6 +2389,8 @@ watch(
 
 onMounted(() => {
 
+  void loadCurrentUser()
+
   void loadRegistryZones()
 
   window.addEventListener('mi-registry-changed', handleRegistryChanged)
@@ -2445,6 +2470,8 @@ onBeforeUnmount(() => {
         <nav class="workspace-tabs" aria-label="작업 화면 전환">
 
           <button
+
+            v-if="canManageMi"
 
             type="button"
 
@@ -3017,7 +3044,13 @@ onBeforeUnmount(() => {
 
     >
 
-      <MiWorkspaceView />
+      <MiWorkspaceView v-if="canManageMi" />
+
+      <p v-else class="mi-access-denied">
+
+        외부 MI 정제는 지정된 담당자만 사용할 수 있습니다.
+
+      </p>
 
     </section>
 
@@ -3964,6 +3997,18 @@ onBeforeUnmount(() => {
   color: var(--li-blue, #2563eb);
 
   background: rgba(37, 99, 235, 0.07);
+
+}
+
+.mi-access-denied {
+
+  margin: 48px auto;
+
+  color: var(--li-text-muted);
+
+  font-size: 12px;
+
+  text-align: center;
 
 }
 

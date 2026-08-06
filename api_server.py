@@ -927,6 +927,20 @@ def get_report_snapshot() -> dict[str, Any]:
     }
 
 
+@app.get("/api/me")
+def get_current_user() -> dict[str, Any]:
+    """현재 사용자 정보 — 외부 MI 정제 탭 관리 권한 판정용.
+
+    사용자명은 서버 프로세스의 OS 로그인 사용자(user_path.current_username)이며,
+    관리 권한은 REPORT_PUBLISH_USERS 목록을 그대로 재사용한다.
+    """
+    username = _current_username_lower()
+    return {
+        "username": username,
+        "can_manage_mi": username in REPORT_PUBLISH_USERS,
+    }
+
+
 @app.post("/api/report/snapshot/publish")
 def publish_report_snapshot() -> dict[str, Any]:
     """게시본 갱신 — 지정 사용자만. 현재 리드타임 집계 + 인사이트 초안을 저장."""
