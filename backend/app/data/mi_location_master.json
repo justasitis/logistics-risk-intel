@@ -81,6 +81,28 @@
       "남중국해"
     ]
   },
+  "CN_COAST_EAST": {
+    "name": "East China Coastal Waters",
+    "location_type": "SEA_AREA",
+    "lat": 29.0,
+    "lon": 122.0,
+    "default_radius_km": 400,
+    "aliases": [
+      "Eastern China",
+      "East China",
+      "East China coastal waters",
+      "동중국",
+      "동중국 연안",
+      "Zhejiang",
+      "Zhejiang province",
+      "저장성",
+      "Shanghai",
+      "SHA",
+      "상하이",
+      "Ningbo",
+      "닝보"
+    ]
+  },
   "ICN": {
     "name": "Incheon International Airport",
     "location_type": "AIRPORT",
