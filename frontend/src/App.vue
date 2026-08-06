@@ -22,8 +22,6 @@ import {
 
 import LogisticsMap from '@/components/LogisticsMap.vue'
 
-import AisUploadPanel from '@/components/AisUploadPanel.vue'
-
 import MiWorkspaceView from '@/views/MiWorkspaceView.vue'
 
 import AnomalyMasterDetailPanel from '@/components/AnomalyMasterDetailPanel.vue'
@@ -1519,32 +1517,6 @@ async function loadMarinesiaFromSharePoint(
 
  
 
-function clearAisUpload() {
-
-  aisUpload.value = null
-
-  selectedAisId.value = ''
-
-
- 
-
-  if (
-
-    transportSelectionSource.value === 'AIS'
-
-  ) {
-
-    transportSelectionSource.value =
-
-      'MANUAL'
-
-  }
-
-}
-
-
- 
-
 function selectAis(payload: {
 
   aisId: string
@@ -2483,7 +2455,7 @@ onBeforeUnmount(() => {
 
           >
 
-            운송 이상 · AIS
+            운송 이상·AIS
 
           </button>
 
@@ -2521,7 +2493,7 @@ onBeforeUnmount(() => {
 
           >
 
-            선박 MMSI 관리
+            MMSI 관리
 
           </button>
 
@@ -2649,21 +2621,6 @@ onBeforeUnmount(() => {
           </select>
 
         </label>
-
-
- 
-
-        <AisUploadPanel
-
-          v-if="activeWorkspace === 'dashboard'"
-
-          :result="aisUpload"
-
-          @loaded="handleAisLoaded"
-
-          @cleared="clearAisUpload"
-
-        />
 
 
  
@@ -3942,7 +3899,9 @@ onBeforeUnmount(() => {
 
   align-items: center;
 
-  gap: 4px;
+  flex-wrap: nowrap;
+
+  gap: 2px;
 
   padding: 3px;
 
@@ -3963,7 +3922,9 @@ onBeforeUnmount(() => {
 
   min-height: 31px;
 
-  padding: 0 12px;
+  padding: 0 8px;
+
+  white-space: nowrap;
 
   color: var(--li-text-muted, #607086);
 
