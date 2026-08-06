@@ -512,7 +512,7 @@ function eventClass(event: TimelineEvent) {
   padding: 10px;
   border-radius: 7px;
   background: rgba(5, 24, 40, 0.52);
-  color: #66899e;
+  color: var(--li-text-faint, #8a98aa);
   font-size: 11px;
   text-align: center;
 }
