@@ -2443,8 +2443,6 @@ onBeforeUnmount(() => {
 
           <button
 
-            v-if="canManageMi"
-
             type="button"
 
             class="workspace-tab"
@@ -2463,6 +2461,8 @@ onBeforeUnmount(() => {
  
 
           <button
+
+            v-if="canManageMi"
 
             type="button"
 
@@ -3961,18 +3961,6 @@ onBeforeUnmount(() => {
 
 }
 
-.mi-access-denied {
-
-  margin: 48px auto;
-
-  color: var(--li-text-muted);
-
-  font-size: 12px;
-
-  text-align: center;
-
-}
-
 
  
 
@@ -4016,6 +4004,18 @@ onBeforeUnmount(() => {
   overflow: auto;
 
   background: transparent;
+
+}
+
+.mi-access-denied {
+
+  margin: 48px auto;
+
+  color: var(--li-text-muted);
+
+  font-size: 12px;
+
+  text-align: center;
 
 }
 
