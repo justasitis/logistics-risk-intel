@@ -539,11 +539,17 @@ function routeCoordinates(feature: Record<string, unknown>): number[][] {
   if (!geometry || typeof geometry !== 'object') return []
 
   const typed = geometry as Record<string, unknown>
-  if (typed.type !== 'LineString' || !Array.isArray(typed.coordinates)) {
-    return []
-  }
 
-  return typed.coordinates
+  const lines =
+    typed.type === 'LineString' && Array.isArray(typed.coordinates)
+      ? [typed.coordinates]
+      : typed.type === 'MultiLineString' && Array.isArray(typed.coordinates)
+        ? typed.coordinates
+        : []
+
+  return lines
+    .filter(Array.isArray)
+    .flatMap((line) => line)
     .filter(
       (value) =>
         Array.isArray(value)

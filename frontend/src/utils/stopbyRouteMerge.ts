@@ -140,14 +140,23 @@ function lineCoordinates(
 
   if (
     geometryRecord.type !== 'LineString'
-    || !Array.isArray(
-      geometryRecord.coordinates,
-    )
+    && geometryRecord.type !== 'MultiLineString'
   ) {
     return []
   }
 
+  if (!Array.isArray(geometryRecord.coordinates)) {
+    return []
+  }
+
+  if (geometryRecord.type === 'LineString') {
+    return geometryRecord.coordinates
+      .filter(Array.isArray)
+  }
+
   return geometryRecord.coordinates
+    .filter(Array.isArray)
+    .flatMap((line) => line)
     .filter(Array.isArray)
 }
 

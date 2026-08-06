@@ -142,11 +142,17 @@ function routeCoordinates(feature: Record<string, unknown>): number[][] {
   if (!feature.geometry || typeof feature.geometry !== 'object') return []
 
   const geometry = feature.geometry as Record<string, unknown>
-  if (geometry.type !== 'LineString' || !Array.isArray(geometry.coordinates)) {
-    return []
-  }
 
-  return geometry.coordinates
+  const lines =
+    geometry.type === 'LineString' && Array.isArray(geometry.coordinates)
+      ? [geometry.coordinates]
+      : geometry.type === 'MultiLineString' && Array.isArray(geometry.coordinates)
+        ? geometry.coordinates
+        : []
+
+  return lines
+    .filter(Array.isArray)
+    .flatMap((line) => line)
     .filter((coordinate) => (
       Array.isArray(coordinate)
       && coordinate.length >= 2

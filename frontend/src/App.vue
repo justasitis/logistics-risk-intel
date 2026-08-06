@@ -3841,9 +3841,9 @@ onBeforeUnmount(() => {
 
   position: absolute;
 
-  top: 12px;
+  top: 58px;
 
-  right: 12px;
+  right: 18px;
 
   z-index: 10;
 

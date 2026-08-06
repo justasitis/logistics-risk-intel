@@ -224,25 +224,31 @@ function fitRoutesOnce() {
       | { type?: string; coordinates?: unknown }
       | undefined
 
-    if (
-      geometry?.type !== 'LineString'
-      || !Array.isArray(geometry.coordinates)
-    ) {
-      continue
-    }
+    const lines =
+      geometry?.type === 'LineString'
+      && Array.isArray(geometry.coordinates)
+        ? [geometry.coordinates]
+        : geometry?.type === 'MultiLineString'
+          && Array.isArray(geometry.coordinates)
+          ? geometry.coordinates
+          : []
 
-    for (const coordinate of geometry.coordinates) {
-      if (
-        Array.isArray(coordinate)
-        && coordinate.length >= 2
-        && Number.isFinite(Number(coordinate[0]))
-        && Number.isFinite(Number(coordinate[1]))
-      ) {
-        bounds.extend([
-          Number(coordinate[0]),
-          Number(coordinate[1]),
-        ])
-        pointCount += 1
+    for (const line of lines) {
+      if (!Array.isArray(line)) continue
+
+      for (const coordinate of line) {
+        if (
+          Array.isArray(coordinate)
+          && coordinate.length >= 2
+          && Number.isFinite(Number(coordinate[0]))
+          && Number.isFinite(Number(coordinate[1]))
+        ) {
+          bounds.extend([
+            Number(coordinate[0]),
+            Number(coordinate[1]),
+          ])
+          pointCount += 1
+        }
       }
     }
   }
@@ -301,7 +307,7 @@ onMounted(() => {
       showCompass: false,
       showZoom: true,
     }),
-    'bottom-left',
+    'bottom-right',
   )
 
   map.on('load', () => {
