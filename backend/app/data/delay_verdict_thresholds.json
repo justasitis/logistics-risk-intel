@@ -1,0 +1,9 @@
+{
+  "iqr_tight": 2.0,
+  "median_small_abs": 1.0,
+  "median_late": 3.0,
+  "iqr_volatile": 4.0,
+  "tail_burst": 6.0,
+  "min_sample": 10,
+  "coverage_warn": 0.7
+}

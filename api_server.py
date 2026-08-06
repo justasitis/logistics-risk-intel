@@ -1029,6 +1029,50 @@ def eta_ata_gap_report(
         ) from exc
 
 
+@app.get("/api/anomaly/delay-decomposition")
+def delay_decomposition_report(
+    group_id: str = Query(default="ADRIA_SUEZ"),
+    months: int = Query(default=12, ge=1, le=36),
+    refresh: bool = Query(default=False),
+) -> dict[str, Any]:
+    """도착지연 분해(출항지연+항해 증감) & 선사 정시성 집계."""
+    key = f"delay-decomposition|{group_id}|{months}"
+    if not refresh and key in _CACHE:
+        cached_at, payload = _CACHE[key]
+        if time.time() - cached_at <= CACHE_TTL_SECONDS:
+            return {**payload, "cache_hit": True}
+
+    try:
+        from services.delay_decomposition_service import (
+            fetch_delay_decomposition,
+        )
+
+        payload = fetch_delay_decomposition(group_id=group_id, months=months)
+        payload = {**payload, "cache_hit": False}
+        _CACHE[key] = (time.time(), payload)
+        return payload
+    except ValueError as exc:
+        # 지원하지 않는 group_id — 남부(서버 안쪽) 예외 문자열은
+        # 응답에 노출하지 않고 로그만 남긴다.
+        logger.warning("지연 분해 요청 거부: %s", exc)
+        raise HTTPException(
+            status_code=404,
+            detail="지원하지 않는 항로 그룹입니다.",
+        ) from exc
+    except RuntimeError as exc:
+        logger.exception("지연 분해 데이터레이크 조회 실패")
+        raise HTTPException(
+            status_code=502,
+            detail="데이터레이크 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("지연 분해 집계 실패")
+        raise HTTPException(
+            status_code=500,
+            detail="도착지연 분해 집계에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+
+
  
 
 ROUTE_MASTER_ALLOWED_DIMS = {
