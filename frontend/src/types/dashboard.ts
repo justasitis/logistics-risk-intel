@@ -66,6 +66,8 @@ export interface TransportRecord {
   item_names?: string
   /** 품목 코드 유니크 전체 목록 (정렬됨, 없으면 빈 배열) */
   item_cds?: string[]
+  /** PO 번호 유니크 전체 목록 (검색용, 없으면 빈 문자열) */
+  po_list?: string
   /** PO 번호 유니크 목록 — 최대 5개 + "외 N개" (없으면 빈 문자열) */
   po_nos?: string
   etd_initial?: string | null

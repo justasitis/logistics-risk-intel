@@ -84,6 +84,8 @@ function searchableEventText(event: ScheduleEvent): string {
     transport?.sppl_names,
     transport?.item_names,
     ...(transport?.item_cds ?? []),
+    // PO 검색: 전체 목록(po_list) 우선, 없으면 표시용(po_nos)으로 매칭
+    transport?.po_list || transport?.po_nos,
   ].join('|'))
 }
 
@@ -241,11 +243,11 @@ function miValidPeriod(impact: MiTransportImpact): string {
 
       <div class="anomaly-master-detail__filters">
         <label class="anomaly-master-detail__search">
-          <span class="sr-only">HBL, TR, 선박 검색</span>
+          <span class="sr-only">HBL, TR, 선박, PO 검색</span>
           <input
             v-model="searchText"
             type="search"
-            placeholder="HBL · TR · 선박 · 공급업체 · 품목 검색"
+            placeholder="HBL · TR · 선박 · PO · 공급업체 · 품목 검색"
           />
         </label>
 

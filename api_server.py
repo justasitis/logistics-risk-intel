@@ -516,7 +516,7 @@ def schedule_overview(
 
             "sppl_names", "item_names", "item_cds",
 
-            "po_nos",
+            "po_list", "po_nos",
 
             "etd_initial", "eta_initial",
 
