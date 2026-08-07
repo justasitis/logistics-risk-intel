@@ -75,20 +75,14 @@ LEADTIME_SELECT_COLUMNS = [
 ]
 
 # dprt 접두 → 국가 판별용 (행 구성은 그룹의 countries 설정이 결정)
-KNOWN_COUNTRY_PREFIXES = ["KR", "CN", "JP", "ID", "PL", "MY", "VN", "US", "DE", "FI", "HK"]
-COUNTRY_ORDER = ["KR", "CN", "JP", "MY", "VN", "US", "DE", "FI", "HK"]
+KNOWN_COUNTRY_PREFIXES = ["KR", "CN", "JP", "ID", "PL"]
+COUNTRY_ORDER = ["KR", "CN", "JP"]
 COUNTRY_LABELS = {
     "KR": "한국",
     "CN": "중국",
     "JP": "일본",
     "ID": "인도네시아",
     "PL": "북유럽",
-    "MY": "말레이시아",
-    "VN": "베트남",
-    "US": "미국",
-    "DE": "북유럽",
-    "FI": "북유럽",
-    "HK": "홍콩",
 }
 STAT_ORDER = ["Avg", "Min", "Max"]
 MONTH_LABELS = [
@@ -172,44 +166,37 @@ def _matches_group(row: dict[str, Any], group: dict[str, Any]) -> bool:
 ADRIA_ARRIVAL_PORTS = {"SIKOP", "SIKOP1", "ITGOA", "ITTRS", "HRRIJ", "HRRJK"}
 
 
-def apply_europe_route_inference(row: dict[str, Any]) -> dict[str, Any] | None:
-    """유럽향(아드리아해 도착) 행의 선사·경유항로 추론.
+def apply_europe_route_inference(row: dict[str, Any]) -> dict[str, Any]:
+    """아시아발 유럽향(아드리아해 도착) 행의 선사·경유항로 추론.
 
     - arvl이 아드리아해 항만이 아니면 row를 그대로 반환.
-    - stopby|stopby_nm에 내용이 있으면 경유 정보가 이미 있으므로 추론 없이 반환.
-    - 선사 보정: carrier_cd/carrier_nm이 모두 비어 있고 lsp_nm에 '유니코'가
-      포함되면 vessel_nm(대문자)으로 추론 — 'CMA' → CMAU/CMA CGM,
-      'MAERSK' → MAEU/Maersk Line. 둘 다 아니면 None(집계 제외).
-      유니코가 아니면서 선사가 비어 있으면 추론 없이 반환(stopby 매칭에 맡김).
-    - 경유항로 추론(stopby가 비어 있을 때만): 보정 후 포함해 MAEU/MAERSK 계열이면
-      stopby에 'CAPE'(희망봉), CMAU/CMA 계열이면 'SUEZ'(수에즈) 부여.
-      둘 다 아니면 부여 없음 — 어느 경유 그룹에도 매칭되지 않아 자연 제외.
+    - 선사 보정 (LSP 무관, 260807 사용자 규칙): vessel_nm(대문자)에
+      'CMA'가 있으면 CMAU/CMA CGM, 'MAERSK'가 있으면 MAEU/Maersk Line으로
+      간주한다 (기존 carrier 값이 있어도 덮어쓴다).
+    - 경유항로 추론(stopby|stopby_nm이 비어 있을 때만): 보정 후 포함해
+      MAEU/MAERSK 계열이면 stopby에 'CAPE'(희망봉), CMAU/CMA 계열이면
+      'SUEZ'(수에즈) 부여. 둘 다 아니면 부여 없음 — 어느 경유 그룹에도
+      매칭되지 않아 자연 제외.
     반환은 복사본이며 원본 dict는 변경하지 않는다.
     """
     arvl = str(row.get("arvl") or "").strip().upper()
     if arvl not in ADRIA_ARRIVAL_PORTS:
         return row
-    stopby_text = str(row.get("stopby") or "").strip() + str(
-        row.get("stopby_nm") or ""
+    out = dict(row)
+    vessel = str(out.get("vessel_nm") or "").upper()
+    if "CMA" in vessel:
+        out["carrier_cd"] = "CMAU"
+        out["carrier_nm"] = "CMA CGM"
+    elif "MAERSK" in vessel:
+        out["carrier_cd"] = "MAEU"
+        out["carrier_nm"] = "Maersk Line"
+    stopby_text = str(out.get("stopby") or "").strip() + str(
+        out.get("stopby_nm") or ""
     ).strip()
     if stopby_text:
-        return row
-    out = dict(row)
+        return out
     carrier_cd = str(out.get("carrier_cd") or "").strip()
-    carrier_nm = str(out.get("carrier_nm") or "").strip()
-    if not carrier_cd and not carrier_nm:
-        if "유니코" not in str(out.get("lsp_nm") or ""):
-            return out
-        vessel = str(out.get("vessel_nm") or "").upper()
-        if "CMA" in vessel:
-            carrier_cd, carrier_nm = "CMAU", "CMA CGM"
-        elif "MAERSK" in vessel:
-            carrier_cd, carrier_nm = "MAEU", "Maersk Line"
-        else:
-            return None
-        out["carrier_cd"] = carrier_cd
-        out["carrier_nm"] = carrier_nm
-    carrier_nm_upper = carrier_nm.upper()
+    carrier_nm_upper = str(out.get("carrier_nm") or "").strip().upper()
     if carrier_cd == "MAEU" or "MAERSK" in carrier_nm_upper:
         out["stopby"] = "CAPE"
     elif carrier_cd == "CMAU" or "CMA" in carrier_nm_upper:
@@ -332,10 +319,8 @@ def compute_leadtime_report(
             # FCL(컨테이너 전적)만 집계 대상
             if str(row.get("cargo_type3") or "").strip().upper() != "FCL":
                 continue
-            # 유럽향(아드리아해 도착) 선사·경유항로 추론 — None이면 집계 제외
+            # 유럽향(아드리아해 도착) 선사·경유항로 추론 (복사본 반환)
             row = apply_europe_route_inference(row)
-            if row is None:
-                continue
             matched = [g for g in groups if _matches_group(row, g)]
             if not matched:
                 continue

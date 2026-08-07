@@ -447,8 +447,8 @@ def test_inference_unico_maersk_vessel_to_cape():
     assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") is None
 
 
-def test_inference_unico_unknown_vessel_excluded():
-    """유니코인데 선명이 CMA/MAERSK 둘 다 아니면 집계 제외(None)."""
+def test_inference_unknown_vessel_not_aggregated():
+    """선명이 CMA/MAERSK 둘 다 아니면 경유 부여 없음 → 어느 경유 그룹에도 미집계."""
     df = pd.DataFrame([
         _row(
             stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
@@ -459,7 +459,37 @@ def test_inference_unico_unknown_vessel_excluded():
     report = _report(df)
     assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") is None
     assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") is None
-    assert svc.apply_europe_route_inference(df.to_dict("records")[0]) is None
+    result = svc.apply_europe_route_inference(df.to_dict("records")[0])
+    assert result.get("stopby") == ""  # 경유 부여 없음
+    assert result.get("carrier_cd") == ""  # 선사 보정 없음
+
+
+def test_inference_vessel_rule_regardless_of_lsp():
+    """LSP 무관하게 선명으로 선사 간주 (260807) — 비유니코 LSP + 선명 CMA."""
+    df = pd.DataFrame([
+        _row(
+            stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+            lsp_nm="기타물류", vessel_nm="CMA CGM LIBERTY",
+            onboard_date="2026-05-01", ata="2026-06-11",
+        ),
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 41.0
+    result = svc.apply_europe_route_inference(df.to_dict("records")[0])
+    assert result["carrier_cd"] == "CMAU"
+    assert result["carrier_nm"] == "CMA CGM"
+
+
+def test_inference_vessel_overrides_existing_carrier():
+    """기존 선사 값이 있어도 선명이 MAERSK면 MAEU/Maersk Line으로 간주."""
+    row = _row(
+        stopby="", stopby_nm="", carrier_cd="HDMU", carrier_nm="HMM",
+        lsp_nm="기타물류", vessel_nm="MAERSK ESSEX",
+    )
+    result = svc.apply_europe_route_inference(row)
+    assert result["carrier_cd"] == "MAEU"
+    assert result["carrier_nm"] == "Maersk Line"
+    assert result["stopby"] == "CAPE"
 
 
 def test_inference_fsk_maersk_carrier_to_cape():

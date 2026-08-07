@@ -410,10 +410,8 @@ def compute_delay_decomposition(
     for row in dedup_bl_info(info_df):
         if _norm_text(row.get("trpr_mode")) != "100":
             continue
-        # 유럽향(아드리아해 도착) 선사·경유항로 추론 — None이면 집계 제외
+        # 유럽향(아드리아해 도착) 선사·경유항로 추론 (복사본 반환)
         row = apply_europe_route_inference(row)
-        if row is None:
-            continue
         if not _matches_group(row, target):
             continue
         ata = _parse_dt(row.get("ata"))
@@ -587,8 +585,6 @@ def _matched_transport_keys(
             continue
         # 집계 루프와 동일하게 유럽향 추론을 적용해 매칭 기준을 맞춘다.
         row = apply_europe_route_inference(row)
-        if row is None:
-            continue
         if not _matches_group(row, target):
             continue
         trpr_no = _norm_text(row.get("trpr_no"))
