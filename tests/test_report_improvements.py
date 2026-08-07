@@ -125,7 +125,7 @@ def override_env(tmp_path, monkeypatch):
             [
                 {
                     "dprt": "KRPUS", "arvl": "SIKOP", "stopby": "SUEZ", "stopby_nm": "",
-                    "cargo_type3": "FCL", "onboard_date": "2026-05-10",
+                    "cargo_type3": "FCL", "trpr_mode": "100", "onboard_date": "2026-05-10",
                     "atd": None, "ata": "2026-06-09",
                     "eta": None, "eta_date": None, "etd": None,
                 }

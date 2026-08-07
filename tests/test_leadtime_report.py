@@ -41,7 +41,8 @@ GROUPS = [
 def _row(**kw):
     base = {
         "dprt": "KRPUS", "arvl": "SIKOP", "stopby": "SUEZ", "stopby_nm": "",
-        "cargo_type3": "FCL",
+        "cargo_type3": "FCL", "trpr_mode": "100",
+        "lsp_nm": "", "vessel_nm": "", "carrier_cd": "", "carrier_nm": "",
         "onboard_date": None, "atd": None, "ata": None,
         "eta": None, "eta_date": None, "etd": None,
     }
@@ -190,16 +191,17 @@ def test_outlier_excluded_by_iqr():
 
 
 def test_sea_mode_only():
-    """운송모드 해상(100)만 집계 — 200/300 제외, 미기재는 해상 간주."""
+    """운송모드 해상(100)만 집계 — 200/300과 미기재(공란) 모두 제외."""
     df = pd.DataFrame([
         _row(trpr_mode="100", onboard_date="2026-05-10", ata="2026-06-09"),  # 해상 포함
-        _row(trpr_mode="300", onboard_date="2026-05-10", ata="2026-06-19"),  # 항공 제외
+        _row(trpr_mode="300", onboard_date="2026-05-10", ata="2026-06-19"),  # 제외
         _row(trpr_mode="200", onboard_date="2026-05-10", ata="2026-06-19"),  # 육상 제외
-        _row(trpr_mode=None, onboard_date="2026-05-10", ata="2026-06-09"),   # 미기재 포함
+        _row(trpr_mode=None, onboard_date="2026-05-10", ata="2026-06-19"),   # 미기재 제외
+        _row(trpr_mode="", onboard_date="2026-05-10", ata="2026-06-19"),     # 공란 제외
     ])
     report = _report(df)
     assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 30.0
-    assert _cell(report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 30.0  # 항공 40일 미반영
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Max", "2026-05") == 30.0  # 비해상 40일 미반영
     assert "sea_mode" in report["definitions"]
 
 
@@ -413,3 +415,147 @@ def test_fetch_leadtime_report_does_not_call_history(monkeypatch):
     assert called["info"] == 1
     assert called["select_columns"] == svc.LEADTIME_SELECT_COLUMNS
     assert report["month_columns"]
+
+
+# ---------- 유럽향 선사·경유항로 추론 (apply_europe_route_inference) ----------
+
+def test_inference_unico_cma_vessel_to_suez():
+    """유니코 + 선명 CMA → carrier CMAU 보정 + 수에즈 경유 부여 → ADRIA_SUEZ 집계."""
+    row = _row(
+        stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+        lsp_nm="유니코로지스", vessel_nm="CMA CGM LIBERTY",
+        onboard_date="2026-05-01", ata="2026-06-11",
+    )
+    original = dict(row)
+    report = _report(pd.DataFrame([row]))
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 41.0
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") is None
+    assert row == original  # 원본 dict 변경 금지
+
+
+def test_inference_unico_maersk_vessel_to_cape():
+    """유니코 + 선명 MAERSK → carrier MAEU 보정 + 희망봉 경유 부여 → ADRIA_CAPE 집계."""
+    df = pd.DataFrame([
+        _row(
+            stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+            lsp_nm="유니코", vessel_nm="MAERSK ESSEX",
+            onboard_date="2026-05-01", ata="2026-06-21",
+        ),
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") == 51.0
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") is None
+
+
+def test_inference_unico_unknown_vessel_excluded():
+    """유니코인데 선명이 CMA/MAERSK 둘 다 아니면 집계 제외(None)."""
+    df = pd.DataFrame([
+        _row(
+            stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+            lsp_nm="유니코로지스", vessel_nm="HYUNDAI MERCURY",
+            onboard_date="2026-05-01", ata="2026-06-01",
+        ),
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") is None
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") is None
+    assert svc.apply_europe_route_inference(df.to_dict("records")[0]) is None
+
+
+def test_inference_fsk_maersk_carrier_to_cape():
+    """FSK(lsp_nm에 'FSK' 포함) + carrier MAEU + stopby 공란 → 희망봉 경유 부여."""
+    df = pd.DataFrame([
+        _row(
+            stopby="", stopby_nm="", lsp_nm="FSK물류",
+            carrier_cd="MAEU", carrier_nm="MAERSK",
+            onboard_date="2026-05-01", ata="2026-06-11",
+        ),
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") == 41.0
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") is None
+
+
+def test_inference_stopby_takes_precedence():
+    """stopby에 내용이 있으면 추론보다 우선 — MAERSK여도 기재된 수에즈 유지."""
+    df = pd.DataFrame([
+        _row(
+            stopby="EGSCN", stopby_nm="SUEZ CANAL",
+            carrier_cd="MAEU", carrier_nm="MAERSK",
+            onboard_date="2026-05-01", ata="2026-06-01",
+        ),
+    ])
+    report = _report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 31.0
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") is None
+
+
+def test_inference_not_applied_outside_adria():
+    """arvl이 아드리아해 항만이 아니면(예: USSAV) 추론 미적용 — 원본 그대로."""
+    row = _row(
+        arvl="USSAV", stopby="", stopby_nm="",
+        carrier_cd="MAEU", carrier_nm="MAERSK",
+    )
+    result = svc.apply_europe_route_inference(row)
+    assert result == row  # stopby 부여 없이 그대로
+    # 추론 없이 유니코+선명만 있는 비아드리아 행도 제외되지 않음
+    unico = _row(
+        arvl="USSAV", stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+        lsp_nm="유니코", vessel_nm="HYUNDAI MERCURY",
+    )
+    assert svc.apply_europe_route_inference(unico) == unico
+
+
+# ---------- 실제 그룹 설정(leadtime_route_groups.json) 기반 매칭 ----------
+
+def _real_report(df):
+    return svc.compute_leadtime_report(
+        df, today=TODAY, groups=svc.load_route_groups(),
+    )
+
+
+def test_hrrjk_matches_both_adria_groups():
+    """HRRJK(리예카)는 ADRIA_SUEZ/ADRIA_CAPE 양쪽 arvl_codes에 포함."""
+    df = pd.DataFrame([
+        _row(arvl="HRRJK", stopby="SUEZ", onboard_date="2026-05-01", ata="2026-06-01"),
+        _row(arvl="HRRJK", stopby="ZACPT", onboard_date="2026-05-01", ata="2026-06-11"),
+    ])
+    report = _real_report(df)
+    assert _cell(report, "ADRIA_SUEZ", "KR", "Avg", "2026-05") == 31.0
+    assert _cell(report, "ADRIA_CAPE", "KR", "Avg", "2026-05") == 41.0
+
+
+def test_eu_north_group_deham():
+    """DEHAM 도착 → EU_NORTH 그룹, 한국 출발 행으로 집계."""
+    df = pd.DataFrame([
+        _row(
+            dprt="KRPUS", arvl="DEHAM", stopby="",
+            onboard_date="2026-05-01", ata="2026-06-01",
+        ),
+    ])
+    report = _real_report(df)
+    assert _cell(report, "EU_NORTH", "KR", "Avg", "2026-05") == 31.0
+
+
+def test_us_east_sea_row_malaysia_dprt():
+    """MYBKI 출발 미주 동안 → US_EAST의 동남아(SEA) 행으로 집계."""
+    df = pd.DataFrame([
+        _row(
+            dprt="MYBKI", arvl="USSAV", stopby="",
+            onboard_date="2026-05-01", ata="2026-06-21",
+        ),
+    ])
+    report = _real_report(df)
+    assert _cell(report, "US_EAST", "SEA", "Avg", "2026-05") == 51.0
+
+
+def test_cndfg_north_china_cntr_row():
+    """CNDFG 출발 → CHINA_TO_KOREA의 북중국(컨테이너) 행으로 집계."""
+    df = pd.DataFrame([
+        _row(
+            dprt="CNDFG", arvl="KRPUS", stopby="",
+            onboard_date="2026-05-01", ata="2026-05-03",
+        ),
+    ])
+    report = _real_report(df)
+    assert _cell(report, "CHINA_TO_KOREA", "NORTH_CN_CNTR", "Avg", "2026-05") == 2.0

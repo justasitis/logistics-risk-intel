@@ -47,6 +47,7 @@ from services.datalake_schedule_client import (
 from services.leadtime_report_service import (
     _matches_group,
     _percentile,
+    apply_europe_route_inference,
     load_route_groups,
 )
 from services.schedule_history_service import normalize_schedule_history
@@ -58,10 +59,11 @@ VERDICT_THRESHOLDS_PATH = (
     / "backend" / "app" / "data" / "delay_verdict_thresholds.json"
 )
 
-# 대상 항로 그룹 5개 (해상만) — 응답의 available_groups 순서이기도 하다.
+# 대상 항로 그룹 6개 (해상만) — 응답의 available_groups 순서이기도 하다.
 TARGET_GROUP_IDS = [
     "ADRIA_SUEZ",
     "ADRIA_CAPE",
+    "EU_NORTH",
     "US_EAST",
     "US_WEST",
     "CHINA_TO_KOREA",
@@ -82,6 +84,7 @@ DELAY_SELECT_COLUMNS = [
     "carrier_nm",
     "vessel_nm",
     "voyage_no",
+    "lsp_nm",
     "trpr_mode",
     "etd",
     "atd",
@@ -106,6 +109,7 @@ _DEDUP_FILL_COLUMNS = [
     "carrier_nm",
     "vessel_nm",
     "voyage_no",
+    "lsp_nm",
     "dprt",
     "arvl",
     "stopby",
@@ -401,10 +405,14 @@ def compute_delay_decomposition(
     window = _month_window(today, months)
     first = compute_first_schedules(history_df)
 
-    # 중복 제거 → 해상(100)만 → 그룹 매칭 → ATA 월 기간 필터
+    # 중복 제거 → 해상(100)만 → 유럽향 추론 → 그룹 매칭 → ATA 월 기간 필터
     period_rows: list[dict[str, Any]] = []
     for row in dedup_bl_info(info_df):
         if _norm_text(row.get("trpr_mode")) != "100":
+            continue
+        # 유럽향(아드리아해 도착) 선사·경유항로 추론 — None이면 집계 제외
+        row = apply_europe_route_inference(row)
+        if row is None:
             continue
         if not _matches_group(row, target):
             continue
@@ -576,6 +584,10 @@ def _matched_transport_keys(
     keys = set()
     for row in dedup_bl_info(info_df):
         if _norm_text(row.get("trpr_mode")) != "100":
+            continue
+        # 집계 루프와 동일하게 유럽향 추론을 적용해 매칭 기준을 맞춘다.
+        row = apply_europe_route_inference(row)
+        if row is None:
             continue
         if not _matches_group(row, target):
             continue

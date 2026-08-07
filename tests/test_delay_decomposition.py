@@ -430,3 +430,38 @@ def test_delay_decomposition_groups_endpoint():
     ids = [g["group_id"] for g in groups]
     assert ids == svc.TARGET_GROUP_IDS
     assert all(g["name"] for g in groups)
+
+
+# 11. 유럽향 선사·경유항로 추론 — 지연 분해에도 동일 적용
+def test_europe_inference_unico_cma_vessel():
+    """유니코 + 선명 CMA + stopby 공란 → 수에즈 경유 부여 → ADRIA_SUEZ 집계."""
+    info, history = _voyage(
+        "TI01", dep=2, voy=1,
+        stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+        lsp_nm="유니코로지스", vessel_nm="CMA CGM LIBERTY",
+    )
+    info_df, history_df = _build([(info, history)])
+    report = _compute(info_df, history_df)
+    assert report["headline"]["total_count"] == 1
+    assert report["headline"]["voyage_count"] == 1
+    # 추론으로 보정된 선사 코드로 집계된다.
+    assert _carrier(report, "CMAU")["voyage_count"] == 1
+
+
+def test_europe_inference_unico_unknown_vessel_excluded():
+    """유니코인데 선명이 CMA/MAERSK 둘 다 아니면 집계 제외."""
+    info, history = _voyage(
+        "TI02", dep=2, voy=1,
+        stopby="", stopby_nm="", carrier_cd="", carrier_nm="",
+        lsp_nm="유니코로지스", vessel_nm="HYUNDAI MERCURY",
+    )
+    info_df, history_df = _build([(info, history)])
+    report = _compute(info_df, history_df)
+    assert report["headline"]["total_count"] == 0
+    assert report["headline"]["voyage_count"] == 0
+
+
+def test_eu_north_in_target_group_ids():
+    """EU_NORTH는 ADRIA_CAPE 다음 위치의 집계 대상 그룹."""
+    ids = svc.TARGET_GROUP_IDS
+    assert ids.index("EU_NORTH") == ids.index("ADRIA_CAPE") + 1

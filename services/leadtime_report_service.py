@@ -3,7 +3,7 @@
 L/T 정의 (사용자 검증 대상 — 변경 시 이 주석과 응답의 definitions를 함께 수정):
 - 집계 대상: cargo_type3 == 'FCL' 인 행만 (컨테이너 전적 — LCL 등 제외)
   + 해상(sea) 그룹은 운송모드 해상(trpr_mode == '100')만 — 육상(200)·
-    Rail+Truck(300) 등 제외. 모드 미기재는 FCL이므로 해상으로 간주해 포함.
+    Rail+Truck(300) 등과 모드 미기재(공란) 건 모두 제외.
     내륙(inland) 그룹은 row_groups의 trpr_mode 코드가 자체 판별한다.
 - 월 그룹핑(해상): onboard_date의 월 (없으면 atd의 월)
 - 실적(actual) 해상 L/T: ata - onboard_date (onboard_date 없으면 ata - atd), 일 단위
@@ -60,6 +60,10 @@ LEADTIME_SELECT_COLUMNS = [
     "stopby_nm",
     "cargo_type3",
     "trpr_mode",
+    "lsp_nm",
+    "vessel_nm",
+    "carrier_cd",
+    "carrier_nm",
     "onboard_date",
     "etd",
     "atd",
@@ -71,14 +75,20 @@ LEADTIME_SELECT_COLUMNS = [
 ]
 
 # dprt 접두 → 국가 판별용 (행 구성은 그룹의 countries 설정이 결정)
-KNOWN_COUNTRY_PREFIXES = ["KR", "CN", "JP", "ID", "PL"]
-COUNTRY_ORDER = ["KR", "CN", "JP"]
+KNOWN_COUNTRY_PREFIXES = ["KR", "CN", "JP", "ID", "PL", "MY", "VN", "US", "DE", "FI", "HK"]
+COUNTRY_ORDER = ["KR", "CN", "JP", "MY", "VN", "US", "DE", "FI", "HK"]
 COUNTRY_LABELS = {
     "KR": "한국",
     "CN": "중국",
     "JP": "일본",
     "ID": "인도네시아",
     "PL": "북유럽",
+    "MY": "말레이시아",
+    "VN": "베트남",
+    "US": "미국",
+    "DE": "북유럽",
+    "FI": "북유럽",
+    "HK": "홍콩",
 }
 STAT_ORDER = ["Avg", "Min", "Max"]
 MONTH_LABELS = [
@@ -89,7 +99,7 @@ MONTH_LABELS = [
 DEFINITIONS = {
     "total_lt": "총 L/T = Cargo Cut-Off + 해상 L/T + 내륙 L/T",
     "scope": "집계 대상: cargo_type3 == 'FCL' (컨테이너 전적) 운송만",
-    "sea_mode": "해상 표는 운송모드 해상(trpr_mode 100)만 집계 — 육상(200)·Rail+Truck(300) 등 제외 (모드 미기재는 FCL 기준 해상 간주)",
+    "sea_mode": "해상 표는 운송모드 해상(trpr_mode 100)만 집계 — 육상(200)·Rail+Truck(300) 등과 모드 미기재 건 모두 제외",
     "fixed_rows": "'고정값' 표시 행은 실데이터 집계가 아닌 사용자 제공 고정값 (훼리 등 spot성 구간)",
     "actual_lt": "실적 해상 L/T = ata - onboard_date (onboard_date 없으면 atd), 일 단위",
     "forecast_lt": "예상 해상 L/T = current_eta - onboard_date (없으면 atd, 그래도 없으면 etd)",
@@ -156,6 +166,55 @@ def _matches_group(row: dict[str, Any], group: dict[str, Any]) -> bool:
     if any(t in haystack for t in excluded):
         return False
     return any(t in haystack for t in tokens)
+
+
+# 아드리아해 도착항 — 이 항만 도착 건에만 유럽향 선사·경유항로 추론을 적용한다.
+ADRIA_ARRIVAL_PORTS = {"SIKOP", "SIKOP1", "ITGOA", "ITTRS", "HRRIJ", "HRRJK"}
+
+
+def apply_europe_route_inference(row: dict[str, Any]) -> dict[str, Any] | None:
+    """유럽향(아드리아해 도착) 행의 선사·경유항로 추론.
+
+    - arvl이 아드리아해 항만이 아니면 row를 그대로 반환.
+    - stopby|stopby_nm에 내용이 있으면 경유 정보가 이미 있으므로 추론 없이 반환.
+    - 선사 보정: carrier_cd/carrier_nm이 모두 비어 있고 lsp_nm에 '유니코'가
+      포함되면 vessel_nm(대문자)으로 추론 — 'CMA' → CMAU/CMA CGM,
+      'MAERSK' → MAEU/Maersk Line. 둘 다 아니면 None(집계 제외).
+      유니코가 아니면서 선사가 비어 있으면 추론 없이 반환(stopby 매칭에 맡김).
+    - 경유항로 추론(stopby가 비어 있을 때만): 보정 후 포함해 MAEU/MAERSK 계열이면
+      stopby에 'CAPE'(희망봉), CMAU/CMA 계열이면 'SUEZ'(수에즈) 부여.
+      둘 다 아니면 부여 없음 — 어느 경유 그룹에도 매칭되지 않아 자연 제외.
+    반환은 복사본이며 원본 dict는 변경하지 않는다.
+    """
+    arvl = str(row.get("arvl") or "").strip().upper()
+    if arvl not in ADRIA_ARRIVAL_PORTS:
+        return row
+    stopby_text = str(row.get("stopby") or "").strip() + str(
+        row.get("stopby_nm") or ""
+    ).strip()
+    if stopby_text:
+        return row
+    out = dict(row)
+    carrier_cd = str(out.get("carrier_cd") or "").strip()
+    carrier_nm = str(out.get("carrier_nm") or "").strip()
+    if not carrier_cd and not carrier_nm:
+        if "유니코" not in str(out.get("lsp_nm") or ""):
+            return out
+        vessel = str(out.get("vessel_nm") or "").upper()
+        if "CMA" in vessel:
+            carrier_cd, carrier_nm = "CMAU", "CMA CGM"
+        elif "MAERSK" in vessel:
+            carrier_cd, carrier_nm = "MAEU", "Maersk Line"
+        else:
+            return None
+        out["carrier_cd"] = carrier_cd
+        out["carrier_nm"] = carrier_nm
+    carrier_nm_upper = carrier_nm.upper()
+    if carrier_cd == "MAEU" or "MAERSK" in carrier_nm_upper:
+        out["stopby"] = "CAPE"
+    elif carrier_cd == "CMAU" or "CMA" in carrier_nm_upper:
+        out["stopby"] = "SUEZ"
+    return out
 
 
 def _percentile(sorted_values: list[float], p: float) -> float:
@@ -273,6 +332,10 @@ def compute_leadtime_report(
             # FCL(컨테이너 전적)만 집계 대상
             if str(row.get("cargo_type3") or "").strip().upper() != "FCL":
                 continue
+            # 유럽향(아드리아해 도착) 선사·경유항로 추론 — None이면 집계 제외
+            row = apply_europe_route_inference(row)
+            if row is None:
+                continue
             matched = [g for g in groups if _matches_group(row, g)]
             if not matched:
                 continue
@@ -285,10 +348,10 @@ def compute_leadtime_report(
 
             for group in matched:
                 metric = str(group.get("metric") or "sea")
-                # 해상 그룹은 해상모드(100)만 — 육상(200)·Rail+Truck(300) 등 제외.
-                # 모드 미기재는 FCL(해상 컨테이너)이므로 해상으로 간주해 포함.
+                # 해상 그룹은 해상모드(100)만 — 육상(200)·Rail+Truck(300) 등과
+                # 모드 미기재(공란) 건 모두 제외.
                 # 내륙 그룹은 row_groups의 trpr_mode 코드가 자체 판별하므로 게이트 없음.
-                if metric == "sea" and mode and mode != "100":
+                if metric == "sea" and mode != "100":
                     continue
                 point = _lt_point(
                     row, onboard, ata, metric, actual_window, forecast_window,
