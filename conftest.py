@@ -70,6 +70,21 @@ def _isolate_sharepoint_root(tmp_path, monkeypatch):
     marinesia_settings.get_marinesia_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_config_dir(tmp_path, monkeypatch):
+    """설정 디렉터리 격리 — 테스트가 실제 SharePoint config 폴터를 건드리지 않도록.
+
+    개발 PC에 SharePoint 루트가 실재하면 config_store의 기본 설정 디렉터리가
+    실제 동기화 폴터 하위 config\\ 로 해석되므로, LRI_CONFIG_DIR을 임시
+    디렉터리로 고정한다. 개별 테스트가 LRI_CONFIG_DIR을 직접 설정하면
+    그 값이 우선한다.
+    """
+    import os
+
+    if not os.environ.get("LRI_CONFIG_DIR"):
+        monkeypatch.setenv("LRI_CONFIG_DIR", str(tmp_path / "config"))
+
+
 @pytest.fixture
 def data_dir(tmp_path):
     """테스트용 임시 데이터 디렉터리."""

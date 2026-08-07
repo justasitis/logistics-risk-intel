@@ -1,0 +1,11 @@
+{
+  "adria_arrival_ports": ["SIKOP", "SIKOP1", "ITGOA", "ITTRS", "HRRIJ", "HRRJK"],
+  "vessel_carrier_rules": [
+    { "keyword": "CMA", "carrier_cd": "CMAU", "carrier_nm": "CMA CGM" },
+    { "keyword": "MAERSK", "carrier_cd": "MAEU", "carrier_nm": "Maersk Line" }
+  ],
+  "carrier_via_rules": [
+    { "carrier_cd": "MAEU", "carrier_nm_contains": "MAERSK", "via": "CAPE" },
+    { "carrier_cd": "CMAU", "carrier_nm_contains": "CMA", "via": "SUEZ" }
+  ]
+}

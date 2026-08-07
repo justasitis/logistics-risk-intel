@@ -27,8 +27,9 @@
 - 최소 표본(min_sample) 미만이면 통계 산출 없이 판정 보류.
 - 커버리지 = 유효 항차 ÷ 전체 매칭 행. coverage_warn 미만이면 경고.
 
-판정문은 규칙 기반이며 임계값은
-backend/app/data/delay_verdict_thresholds.json 에서 읽는다 (읽기 전용).
+판정문은 규칙 기반이며 임계값은 delay_thresholds 설정
+(기본 backend/app/data/delay_verdict_thresholds.json, config_store 경유)에서
+읽는다. 대상 항로 그룹은 route_groups 설정의 delay_target 플래그로 도출한다.
 """
 from __future__ import annotations
 
@@ -40,6 +41,7 @@ from typing import Any
 
 import pandas as pd
 
+from services import config_store
 from services.datalake_schedule_client import (
     fetch_bl_history_for_transports,
     fetch_bl_info,
@@ -59,7 +61,9 @@ VERDICT_THRESHOLDS_PATH = (
     / "backend" / "app" / "data" / "delay_verdict_thresholds.json"
 )
 
-# 대상 항로 그룹 6개 (해상만) — 응답의 available_groups 순서이기도 하다.
+# 대상 항로 그룹 폴터 상수 — route_groups 설정의 "delay_target": true 플래그가
+# 하나도 없을 때만 쓰는 폴터다. 실제 대상 그룹 도출은 target_group_ids() 참조.
+# (응답의 available_groups 순서이기도 하다.)
 TARGET_GROUP_IDS = [
     "ADRIA_SUEZ",
     "ADRIA_CAPE",
@@ -68,6 +72,19 @@ TARGET_GROUP_IDS = [
     "US_WEST",
     "CHINA_TO_KOREA",
 ]
+
+
+def target_group_ids(groups: list[dict[str, Any]] | None = None) -> list[str]:
+    """지연 분해 대상 그룹 id — 그룹 설정의 delay_target 플래그 기반.
+
+    플래그가 붙은 그룹이 하나도 없으면 TARGET_GROUP_IDS 상수로 폴터한다.
+    """
+    if groups is None:
+        groups = load_route_groups()
+    flagged = [
+        str(g["group_id"]) for g in groups if g.get("delay_target") is True
+    ]
+    return flagged or list(TARGET_GROUP_IDS)
 
 # 지연 분해에 필요한 컬럼만 서버측 프로젝션 ($select)
 DELAY_SELECT_COLUMNS = [
@@ -123,9 +140,19 @@ _DATE_COLUMNS = ["etd", "atd", "eta", "eta_date", "ata"]
 
 
 def load_verdict_thresholds(path: Path | None = None) -> dict[str, Any]:
-    target = path or VERDICT_THRESHOLDS_PATH
-    with open(target, encoding="utf-8") as f:
-        return json.load(f)
+    """판정 임계값 로드 — config_store 경유 (커스텀 파일 우선, repo 기본 폴터).
+
+    path를 명시하면 해당 파일을 직접 읽는다 (테스트 주입용).
+    """
+    if path is not None:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    data = config_store.load_config(
+        "delay_thresholds", default_path=VERDICT_THRESHOLDS_PATH,
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError("지연 판정 임계값 설정을 읽을 수 없습니다.")
+    return data
 
 
 def _parse_dt(value: Any) -> pd.Timestamp | None:
@@ -282,12 +309,13 @@ def list_delay_groups(
     """집계 대상 항로 그룹(id+name) 목록 — 외부 호출 없음(드롭다운용)."""
     if groups is None:
         groups = load_route_groups()
+    target_ids = target_group_ids(groups)
     available = [
         {"group_id": g["group_id"], "name": g.get("name", g["group_id"])}
         for g in groups
-        if g.get("group_id") in TARGET_GROUP_IDS
+        if g.get("group_id") in target_ids
     ]
-    available.sort(key=lambda g: TARGET_GROUP_IDS.index(g["group_id"]))
+    available.sort(key=lambda g: target_ids.index(g["group_id"]))
     return available
 
 
@@ -392,7 +420,7 @@ def compute_delay_decomposition(
     if thresholds is None:
         thresholds = load_verdict_thresholds()
 
-    if group_id not in TARGET_GROUP_IDS:
+    if group_id not in target_group_ids(groups):
         raise ValueError(f"지원하지 않는 항로 그룹: {group_id}")
     target = next(
         (g for g in groups if g.get("group_id") == group_id), None,
@@ -613,9 +641,9 @@ def fetch_delay_decomposition(
     """
     if today is None:
         today = date.today()
-    if group_id not in TARGET_GROUP_IDS:
-        raise ValueError(f"지원하지 않는 항로 그룹: {group_id}")
     groups = load_route_groups()
+    if group_id not in target_group_ids(groups):
+        raise ValueError(f"지원하지 않는 항로 그룹: {group_id}")
     target = next(
         (g for g in groups if g.get("group_id") == group_id), None,
     )

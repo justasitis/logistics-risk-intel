@@ -19,6 +19,8 @@ _SECRET_PATTERNS = (
     re.compile(r"\b(api[_-]?key\s*[=:]\s*)[^&\s\"']+", re.IGNORECASE),
 )
 
+# 허용 법인 폴터 상수 — companies 설정을 읽지 못할 때만 사용.
+# 실제 허용 집합은 companies 설정(기본 backend/app/data/companies.json)이 우선.
 _ALLOWED_COMPANIES = {
     "SKO",
     "SKOH",
@@ -27,6 +29,23 @@ _ALLOWED_COMPANIES = {
     "SKOJ",
     "SKOY",
 }
+
+
+def _allowed_companies() -> set[str]:
+    """허용 법인 코드 집합 — companies 설정 우선, 실패 시 상수 폴터."""
+    try:
+        from services.config_store import load_companies
+
+        companies = load_companies()
+    except Exception:  # 설정 로드 실패는 폴터로 흡수
+        companies = None
+    if companies:
+        return {
+            str(c.get("code") or "").strip().upper()
+            for c in companies
+            if c.get("code")
+        }
+    return set(_ALLOWED_COMPANIES)
 
 
 def _text(value: Any) -> str:
@@ -429,7 +448,7 @@ def read_marinesia_latest(
         if value.strip()
     }
 
-    unsupported = company_filter - _ALLOWED_COMPANIES
+    unsupported = company_filter - _allowed_companies()
     if unsupported:
         raise ValueError(
             "지원하지 않는 법인 코드: "

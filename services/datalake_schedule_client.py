@@ -40,9 +40,11 @@ HISTORY_SELECT_COLUMNS = [
     "fr_date", "to_date", "ins_datetime", "ins_person_id",
 ]
 
-# 법인 이름(cmpy_nm, UI 표기) ↔ 법인 코드(cmpy_cd) 매핑 — 단일 정의처.
+# 법인 이름(cmpy_nm, UI 표기) ↔ 법인 코드(cmpy_cd) 매핑 폴터 상수.
 # 프런트 법인 필터는 이름 표기(SKO/SKBA/...)를 본번호와 혼용할 수 있으므로
 # 양쪽 모두 받아 cmpy_nm 기준으로 정규화한다.
+# 실제 적용 매핑은 companies 설정(기본 backend/app/data/companies.json,
+# config_store 경유)이 우선이며, 설정을 읽지 못할 때만 이 상수로 폴터한다.
 COMPANY_NAME_TO_CODE = {
     "SKO": "S000",
     "SKOH": "S210",
@@ -56,16 +58,32 @@ COMPANY_CODE_TO_NAME = {
 }
 
 
+def _company_maps() -> tuple[dict[str, str], dict[str, str]]:
+    """(이름→코드, 코드→이름) 매핑 — companies 설정 우선, 실패 시 상수 폴터."""
+    from services import config_store
+
+    companies = config_store.load_companies()
+    if companies:
+        name_to_code = {
+            str(c["code"]).strip().upper(): str(c["lap_code"]).strip()
+            for c in companies
+        }
+        return name_to_code, {
+            code: name for name, code in name_to_code.items()
+        }
+    return COMPANY_NAME_TO_CODE, COMPANY_CODE_TO_NAME
+
+
 def normalize_company_name(value: Any) -> str:
     """법인 코드(S000)가 들어오면 이름(SKO)으로 변환. 미등록 값은 원형 유지."""
     text = str(value or "").strip()
-    return COMPANY_CODE_TO_NAME.get(text.upper(), text)
+    return _company_maps()[1].get(text.upper(), text)
 
 
 def normalize_company_code(value: Any) -> str:
     """법인 이름(SKO)이 들어오면 코드(S000)로 변환. 미등록 값은 원형 유지."""
     text = str(value or "").strip()
-    return COMPANY_NAME_TO_CODE.get(text.upper(), text)
+    return _company_maps()[0].get(text.upper(), text)
 
 INFO_DATE_COLUMNS = [
     "dlvy_req_date", "onboard_date", "etd", "atd", "eta", "eta_date", "ata",

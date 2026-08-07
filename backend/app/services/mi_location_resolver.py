@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from services import config_store
 
 from ..schemas.mi_ai import AffectedLocation, LocationRef
 
@@ -10,9 +11,12 @@ MASTER_PATH = Path(__file__).resolve().parents[1] / "data" / "mi_location_master
 
 
 def load_location_master() -> dict[str, dict[str, Any]]:
-    if not MASTER_PATH.exists():
+    """위치 마스터 로드 — config_store 경유 (커스텀 파일 우선, MASTER_PATH 폴터)."""
+    payload = config_store.load_config(
+        "location_master", default_path=MASTER_PATH,
+    )
+    if payload is None:
         return {}
-    payload = json.loads(MASTER_PATH.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise RuntimeError("mi_location_master.json must be an object")
     return {

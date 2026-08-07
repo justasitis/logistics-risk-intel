@@ -11,13 +11,15 @@ NaN 처리 원칙:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 import hashlib
 import math
 from typing import Any, Optional
 
 import pandas as pd
+
+from services import config_store
 
 
 SEVERITY_RANK = {
@@ -42,6 +44,30 @@ class AnomalyThresholds:
     delivery_breach_medium_days: int = 3
     delivery_breach_high_days: int = 7
     delivery_breach_critical_days: int = 14
+
+
+def load_anomaly_thresholds() -> AnomalyThresholds:
+    """anomaly_thresholds 설정에서 기본 임계값 로드.
+
+    config_store 경유(커스텀 파일 우선, repo 기본
+    backend/app/data/anomaly_thresholds.json 폴터). 읽기 실패나
+    누락/비정상 필드는 dataclass 기본값으로 채운다.
+    """
+    defaults = AnomalyThresholds()
+    try:
+        data = config_store.load_config("anomaly_thresholds")
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        return defaults
+    values: dict[str, int] = {}
+    for field in fields(AnomalyThresholds):
+        raw = data.get(field.name)
+        try:
+            values[field.name] = int(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            values[field.name] = getattr(defaults, field.name)
+    return AnomalyThresholds(**values)
 
 
 def _is_missing(value: Any) -> bool:
@@ -176,7 +202,7 @@ def evaluate_schedule_anomalies(
     *,
     thresholds: Optional[AnomalyThresholds] = None,
 ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
-    rules = thresholds or AnomalyThresholds()
+    rules = thresholds or load_anomaly_thresholds()
 
     if metrics_df.empty:
         return metrics_df.copy(), []

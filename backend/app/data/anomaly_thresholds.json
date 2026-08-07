@@ -1,0 +1,12 @@
+{
+  "repeated_delay_count": 2,
+  "medium_delay_days": 3,
+  "high_delay_days": 6,
+  "critical_delay_days": 10,
+  "lead_time_warning_days": 3,
+  "lead_time_high_days": 6,
+  "lead_time_critical_days": 10,
+  "delivery_breach_medium_days": 3,
+  "delivery_breach_high_days": 7,
+  "delivery_breach_critical_days": 14
+}

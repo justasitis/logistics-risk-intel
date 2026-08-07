@@ -1,0 +1,10 @@
+{
+  "companies": [
+    { "code": "SKO", "label": "SKO — 한국", "lap_code": "S000" },
+    { "code": "SKBM", "label": "SKBM — 헝가리", "lap_code": "S220" },
+    { "code": "SKOH", "label": "SKOH — 헝가리", "lap_code": "S210" },
+    { "code": "SKOJ", "label": "SKOJ — 중국", "lap_code": "S930" },
+    { "code": "SKOY", "label": "SKOY — 중국", "lap_code": "S950" },
+    { "code": "SKBA", "label": "SKBA — 미국", "lap_code": "S330" }
+  ]
+}

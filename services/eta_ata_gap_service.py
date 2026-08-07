@@ -19,6 +19,7 @@ from typing import Any
 
 import pandas as pd
 
+from services import config_store
 from services.datalake_schedule_client import fetch_bl_info
 from services.leadtime_report_service import (
     _matches_group,
@@ -41,11 +42,36 @@ GAP_SELECT_COLUMNS = [
 ]
 
 # 완료 운송(ata) 대상이라 짧은 창으로 충분 (해상 L/T + 지연 여유)
+# 아래 상수들은 gap_thresholds 설정을 읽지 못할 때만 쓰는 폴터 기본값이다.
+# 실제 적용값은 backend/app/data/gap_thresholds.json (config_store의
+# gap_thresholds 키)에서 읽는다.
 ETD_LOOKBACK_DAYS = 180
 
 DEFAULT_WEEKS = 8
 DEFAULT_WARN_DAYS = 5.0
 DEFAULT_WATCH_CONSECUTIVE = 3
+
+_DEFAULT_GAP_THRESHOLDS = {
+    "warn_days": DEFAULT_WARN_DAYS,
+    "watch_consecutive": DEFAULT_WATCH_CONSECUTIVE,
+    "weeks": DEFAULT_WEEKS,
+    "etd_lookback_days": ETD_LOOKBACK_DAYS,
+}
+
+
+def load_gap_thresholds() -> dict[str, Any]:
+    """Gap 임계값 로드 — config_store 경유, 누락/오류 필드는 폴터 기본값."""
+    try:
+        data = config_store.load_config("gap_thresholds")
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        return dict(_DEFAULT_GAP_THRESHOLDS)
+    merged = dict(_DEFAULT_GAP_THRESHOLDS)
+    for key in merged:
+        if key in data:
+            merged[key] = data[key]
+    return merged
 
 
 def _iso_week_key(ts: pd.Timestamp) -> str:
@@ -131,13 +157,23 @@ def _weekly_stats(series: dict[str, list[float]], week_keys: list[str]) -> list[
 def compute_eta_ata_gap(
     info_df: pd.DataFrame,
     *,
-    weeks: int = DEFAULT_WEEKS,
+    weeks: int | None = None,
     today: date | None = None,
     groups: list[dict[str, Any]] | None = None,
-    warn_days: float = DEFAULT_WARN_DAYS,
-    watch_consecutive: int = DEFAULT_WATCH_CONSECUTIVE,
+    warn_days: float | None = None,
+    watch_consecutive: int | None = None,
 ) -> dict[str, Any]:
-    """bl_info DataFrame → 주차별 Gap 집계. 외부 호출 없음(테스트 가능)."""
+    """bl_info DataFrame → 주차별 Gap 집계. 외부 호출 없음(테스트 가능).
+
+    weeks/warn_days/watch_consecutive 미지정 시 gap_thresholds 설정값 사용.
+    """
+    thresholds = load_gap_thresholds()
+    if weeks is None:
+        weeks = int(thresholds["weeks"])
+    if warn_days is None:
+        warn_days = float(thresholds["warn_days"])
+    if watch_consecutive is None:
+        watch_consecutive = int(thresholds["watch_consecutive"])
     if today is None:
         today = date.today()
     if groups is None:
@@ -220,10 +256,18 @@ def compute_eta_ata_gap(
     }
 
 
-def fetch_eta_ata_gap(*, weeks: int = DEFAULT_WEEKS) -> dict[str, Any]:
-    """외부 호출 포함: bl_info 조회 → 집계."""
+def fetch_eta_ata_gap(*, weeks: int | None = None) -> dict[str, Any]:
+    """외부 호출 포함: bl_info 조회 → 집계.
+
+    weeks 미지정 시 gap_thresholds 설정의 weeks/etd_lookback_days를 쓴다.
+    """
+    thresholds = load_gap_thresholds()
+    if weeks is None:
+        weeks = int(thresholds["weeks"])
     info_df = fetch_bl_info(
-        etd_from=date.today() - timedelta(days=ETD_LOOKBACK_DAYS),
+        etd_from=date.today() - timedelta(
+            days=int(thresholds["etd_lookback_days"]),
+        ),
         select_columns=GAP_SELECT_COLUMNS,
     )
     return compute_eta_ata_gap(info_df, weeks=weeks)

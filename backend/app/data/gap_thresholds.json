@@ -1,0 +1,6 @@
+{
+  "warn_days": 5.0,
+  "watch_consecutive": 3,
+  "weeks": 8,
+  "etd_lookback_days": 180
+}

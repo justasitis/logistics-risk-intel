@@ -38,6 +38,7 @@ from typing import Any
 
 import pandas as pd
 
+from services import config_store
 from services.datalake_schedule_client import fetch_bl_info
 
 logger = logging.getLogger(__name__)
@@ -105,9 +106,17 @@ DEFINITIONS = {
 
 
 def load_route_groups(path: Path | None = None) -> list[dict[str, Any]]:
-    target = path or ROUTE_GROUPS_PATH
-    with open(target, encoding="utf-8") as f:
-        data = json.load(f)
+    """항로 그룹 설정 로드 — config_store 경유 (커스텀 파일 우선, repo 기본 폴터).
+
+    path를 명시하면 해당 파일을 직접 읽는다 (테스트 주입용).
+    """
+    if path is not None:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = config_store.load_config(
+            "route_groups", default_path=ROUTE_GROUPS_PATH,
+        ) or {}
     return data.get("groups", [])
 
 
@@ -162,45 +171,86 @@ def _matches_group(row: dict[str, Any], group: dict[str, Any]) -> bool:
     return any(t in haystack for t in tokens)
 
 
-# 아드리아해 도착항 — 이 항만 도착 건에만 유럽향 선사·경유항로 추론을 적용한다.
+# 아드리아해 도착항 폴터 상수 — carrier_inference 설정을 읽지 못할 때만 쓰는
+# 폴터 기본값이다. 실제 적용값은 backend/app/data/carrier_inference.json
+# (config_store의 carrier_inference 키)에서 읽는다.
 ADRIA_ARRIVAL_PORTS = {"SIKOP", "SIKOP1", "ITGOA", "ITTRS", "HRRIJ", "HRRJK"}
+_FALLBACK_VESSEL_CARRIER_RULES = [
+    {"keyword": "CMA", "carrier_cd": "CMAU", "carrier_nm": "CMA CGM"},
+    {"keyword": "MAERSK", "carrier_cd": "MAEU", "carrier_nm": "Maersk Line"},
+]
+_FALLBACK_CARRIER_VIA_RULES = [
+    {"carrier_cd": "MAEU", "carrier_nm_contains": "MAERSK", "via": "CAPE"},
+    {"carrier_cd": "CMAU", "carrier_nm_contains": "CMA", "via": "SUEZ"},
+]
 
 
-def apply_europe_route_inference(row: dict[str, Any]) -> dict[str, Any]:
-    """아시아발 유럽향(아드리아해 도착) 행의 선사·경유항로 추론.
+def load_carrier_inference() -> dict[str, Any]:
+    """선사·경유항로 추론 규칙 로드 — config_store 경유, 실패 시 폴터 규칙."""
+    try:
+        data = config_store.load_config("carrier_inference")
+    except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        return {
+            "adria_arrival_ports": sorted(ADRIA_ARRIVAL_PORTS),
+            "vessel_carrier_rules": [
+                dict(r) for r in _FALLBACK_VESSEL_CARRIER_RULES
+            ],
+            "carrier_via_rules": [dict(r) for r in _FALLBACK_CARRIER_VIA_RULES],
+        }
+    return data
 
-    - arvl이 아드리아해 항만이 아니면 row를 그대로 반환.
-    - 선사 보정 (LSP 무관, 260807 사용자 규칙): vessel_nm(대문자)에
-      'CMA'가 있으면 CMAU/CMA CGM, 'MAERSK'가 있으면 MAEU/Maersk Line으로
-      간주한다 (기존 carrier 값이 있어도 덮어쓴다).
-    - 경유항로 추론(stopby|stopby_nm이 비어 있을 때만): 보정 후 포함해
-      MAEU/MAERSK 계열이면 stopby에 'CAPE'(희망봉), CMAU/CMA 계열이면
-      'SUEZ'(수에즈) 부여. 둘 다 아니면 부여 없음 — 어느 경유 그룹에도
-      매칭되지 않아 자연 제외.
+
+def apply_europe_route_inference(
+    row: dict[str, Any],
+    rules: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """아시아발 유럽향(아드리아해 도착) 행의 선사·경유항로 추론 (규칙 구동형).
+
+    규칙은 carrier_inference 설정(기본 backend/app/data/carrier_inference.json):
+    - adria_arrival_ports: 추론 적용 도착항. arvl이 여기 없으면 row 그대로 반환.
+    - vessel_carrier_rules (260807 사용자 규칙, LSP 무관): vessel_nm(대문자)에
+      keyword가 포함되면 carrier_cd/carrier_nm을 규칙값으로 간주한다
+      (기존 carrier 값이 있어도 덮어쓴다). 첫 매칭 규칙만 적용.
+    - carrier_via_rules (stopby|stopby_nm이 비어 있을 때만): 보정 후 값 기준
+      carrier_cd 일치 또는 carrier_nm(대문자)에 carrier_nm_contains 포함 시
+      stopby에 via(SUEZ/CAPE) 부여. 첫 매칭 규칙만 적용. 어느 규칙에도
+      매칭되지 않으면 부여 없음 — 어느 경유 그룹에도 매칭되지 않아 자연 제외.
     반환은 복사본이며 원본 dict는 변경하지 않는다.
     """
+    if rules is None:
+        rules = load_carrier_inference()
+    ports = rules.get("adria_arrival_ports") or sorted(ADRIA_ARRIVAL_PORTS)
+    adria_ports = {str(p).strip().upper() for p in ports}
     arvl = str(row.get("arvl") or "").strip().upper()
-    if arvl not in ADRIA_ARRIVAL_PORTS:
+    if arvl not in adria_ports:
         return row
     out = dict(row)
     vessel = str(out.get("vessel_nm") or "").upper()
-    if "CMA" in vessel:
-        out["carrier_cd"] = "CMAU"
-        out["carrier_nm"] = "CMA CGM"
-    elif "MAERSK" in vessel:
-        out["carrier_cd"] = "MAEU"
-        out["carrier_nm"] = "Maersk Line"
+    for rule in rules.get("vessel_carrier_rules") or []:
+        keyword = str(rule.get("keyword") or "").strip().upper()
+        if keyword and keyword in vessel:
+            out["carrier_cd"] = rule.get("carrier_cd")
+            out["carrier_nm"] = rule.get("carrier_nm")
+            break
     stopby_text = str(out.get("stopby") or "").strip() + str(
         out.get("stopby_nm") or ""
     ).strip()
     if stopby_text:
         return out
-    carrier_cd = str(out.get("carrier_cd") or "").strip()
+    carrier_cd = str(out.get("carrier_cd") or "").strip().upper()
     carrier_nm_upper = str(out.get("carrier_nm") or "").strip().upper()
-    if carrier_cd == "MAEU" or "MAERSK" in carrier_nm_upper:
-        out["stopby"] = "CAPE"
-    elif carrier_cd == "CMAU" or "CMA" in carrier_nm_upper:
-        out["stopby"] = "SUEZ"
+    for rule in rules.get("carrier_via_rules") or []:
+        rule_cd = str(rule.get("carrier_cd") or "").strip().upper()
+        rule_nm = str(rule.get("carrier_nm_contains") or "").strip().upper()
+        if (rule_cd and carrier_cd == rule_cd) or (
+            rule_nm and rule_nm in carrier_nm_upper
+        ):
+            via = str(rule.get("via") or "").strip().upper()
+            if via:
+                out["stopby"] = via
+            break
     return out
 
 

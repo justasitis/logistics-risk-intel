@@ -1000,10 +1000,13 @@ def publish_report_snapshot() -> dict[str, Any]:
 
 @app.get("/api/anomaly/eta-ata-gap")
 def eta_ata_gap_report(
-    weeks: int = Query(default=8, ge=4, le=16),
+    weeks: int | None = Query(default=None, ge=4, le=16),
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
-    """ETA-ATA Gap 주차별 집계 + 추세/경고 판정 (협의체장 요구)."""
+    """ETA-ATA Gap 주차별 집계 + 추세/경고 판정 (협의체장 요구).
+
+    weeks 미지정 시 gap_thresholds 설정값을 쓴다.
+    """
     key = f"eta-ata-gap|{weeks}"
     if not refresh and key in _CACHE:
         cached_at, payload = _CACHE[key]
@@ -1880,6 +1883,97 @@ def apply_mi_registry_proposal(body: RegistryApplyBody) -> dict[str, Any]:
 
 
  
+
+# ---------- 업무 기준정보 설정 (config_store) ----------
+# 하드코딩됐던 기준정보(항로 그룹, 임계값, 법인 매핑, 추론 규칙 등)를
+# JSON 설정으로 노출한다. 읽기는 전원 허용, 쓰기/초기화는
+# REPORT_PUBLISH_USERS 판정을 재사용한다.
+# 주의: /catalog는 /{key}보다 먼저 등록해 경로 충돌을 피한다.
+
+
+def _require_config_manager() -> None:
+    """설정 쓰기 권한 확인 — REPORT_PUBLISH_USERS 판정 재사용."""
+    if _current_username_lower() not in REPORT_PUBLISH_USERS:
+        raise HTTPException(
+            status_code=403, detail="설정 변경 권한이 없는 사용자입니다."
+        )
+
+
+@app.get("/api/config/catalog")
+def config_catalog() -> dict[str, Any]:
+    """설정 섹션 카탈로그 — 전 사용자 열람."""
+    from services import config_store
+
+    return {"sections": config_store.catalog()}
+
+
+@app.get("/api/config/{key}")
+def get_config_section(key: str) -> dict[str, Any]:
+    """설정 섹션 조회 (현재 적용 데이터 포함) — 전 사용자 열람."""
+    from services import config_store
+
+    try:
+        return config_store.describe(key, include_data=True)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="알 수 없는 설정 키입니다."
+        ) from exc
+
+
+@app.put("/api/config/{key}")
+def put_config_section(
+    key: str,
+    body: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    """설정 저장 — 관리자만. 검증 실패는 400(한국어 메시지)."""
+    from services import config_store
+
+    _require_config_manager()
+    if not isinstance(body, dict) or "data" not in body:
+        raise HTTPException(
+            status_code=400, detail="요청 본문에 data 필드가 필요합니다."
+        )
+    try:
+        config_store.validate_config(key, body["data"])
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="알 수 없는 설정 키입니다."
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        config_store.save_config(key, body["data"])
+    except OSError as exc:
+        # 낸부 예외 문자열은 응답에 노출하지 않고 로그만 남긴다.
+        logger.error("설정 저장 실패 (%s): %s", key, exc)
+        raise HTTPException(
+            status_code=500, detail="설정 저장에 실패했습니다."
+        ) from exc
+    # 설정 변경이 집계 결과에 즉시 반영되도록 캐시를 전체 비운다.
+    _CACHE.clear()
+    return {"ok": True}
+
+
+@app.post("/api/config/{key}/reset")
+def reset_config_section(key: str) -> dict[str, Any]:
+    """설정 초기화 — 커스텀 파일 삭제 후 repo 기본값으로 복귀. 관리자만."""
+    from services import config_store
+
+    _require_config_manager()
+    try:
+        config_store.reset_config(key)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="알 수 없는 설정 키입니다."
+        ) from exc
+    except OSError as exc:
+        logger.error("설정 초기화 실패 (%s): %s", key, exc)
+        raise HTTPException(
+            status_code=500, detail="설정 초기화에 실패했습니다."
+        ) from exc
+    _CACHE.clear()
+    return {"ok": True}
+
 
 # 프런트엔드 정적 서빙 — frontend/dist가 있으면 / 에 마운트한다.
 
