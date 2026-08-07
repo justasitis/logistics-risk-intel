@@ -26,10 +26,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
 export async function getLeadtimeReport(
   months = 12,
   forecastMonths = 3,
+  refresh = false,
 ): Promise<LeadtimeReport> {
+  const params = `months=${months}&forecast_months=${forecastMonths}`
   return parseResponse(
     await fetch(
-      `${API_BASE}/api/report/leadtime?months=${months}&forecast_months=${forecastMonths}`,
+      `${API_BASE}/api/report/leadtime?${params}${refresh ? '&refresh=true' : ''}`,
     ),
   )
 }
@@ -45,8 +47,12 @@ export async function publishReportSnapshot(): Promise<ReportSnapshot> {
   )
 }
 
-export async function getEtaAtaGap(): Promise<EtaAtaGapResponse> {
-  return parseResponse(await fetch(`${API_BASE}/api/anomaly/eta-ata-gap`))
+export async function getEtaAtaGap(refresh = false): Promise<EtaAtaGapResponse> {
+  return parseResponse(
+    await fetch(
+      `${API_BASE}/api/anomaly/eta-ata-gap${refresh ? '?refresh=true' : ''}`,
+    ),
+  )
 }
 
 export async function postInsightDraft(

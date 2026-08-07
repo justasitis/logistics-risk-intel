@@ -74,6 +74,8 @@ const savingCells = ref(false)
 const canPublish = ref(false)
 const publishedMeta = ref<{ at: string; by: string } | null>(null)
 const publishing = ref(false)
+// 새로고침(라이브 재집계)으로 화면이 게시본과 다른 상태임을 표시
+const liveRefreshed = ref(false)
 
 // ETA-ATA Gap 요약 (그룹별 배지) — 게시본에 포함되면 그것 사용
 const gapData = ref<EtaAtaGapResponse | null>(null)
@@ -103,6 +105,7 @@ function applySnapshot(snapshot: ReportSnapshot) {
   report.value = snapshot.report
   insight.value = snapshot.insight
   gapData.value = snapshot.gap ?? null
+  liveRefreshed.value = false
   publishedMeta.value = {
     at: snapshot.published_at,
     by: snapshot.published_by,
@@ -133,6 +136,27 @@ async function load() {
     gapData.value = liveGap
   } catch (e) {
     error.value = e instanceof Error ? e.message : '리포트 조회 실패'
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 새로고침 — 게시본과 무관하게 리드타임·Gap을 라이브 재집계해 화면 갱신.
+ *  게시는 하지 않으므로 다른 사용자의 게시본은 그대로다. */
+async function refreshLive() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [liveReport, liveGap] = await Promise.all([
+      getLeadtimeReport(12, 3, true),
+      getEtaAtaGap(true).catch(() => null),
+    ])
+    report.value = liveReport
+    gapData.value = liveGap
+    publishedMeta.value = null
+    liveRefreshed.value = true
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '리드타임 재집계 실패'
   } finally {
     loading.value = false
   }
@@ -186,7 +210,7 @@ async function saveCells() {
     if (Object.keys(overrides).length) await putLeadtimeOverrides(overrides)
     editValues.value = {}
     editMode.value = false
-    await load()
+    await refreshLive()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '편집값 저장 실패'
   } finally {
@@ -201,7 +225,7 @@ async function resetCells() {
     await deleteLeadtimeOverrides()
     editValues.value = {}
     editMode.value = false
-    await load()
+    await refreshLive()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '편집값 초기화 실패'
   } finally {
@@ -551,7 +575,14 @@ ${eventsHtml}
         </div>
       </div>
       <div class="actions">
-        <button class="btn" :disabled="loading || savingCells" @click="load">새로고침</button>
+        <button
+          class="btn"
+          :disabled="loading || savingCells"
+          title="리드타임을 라이브로 재집계합니다. 게시본에는 반영되지 않습니다 (수 분 소요 가능)"
+          @click="refreshLive"
+        >
+          {{ loading ? '재집계 중... (수 분 소요 가능)' : '새로고침' }}
+        </button>
         <button
           v-if="canPublish"
           class="btn primary"
@@ -575,6 +606,9 @@ ${eventsHtml}
 
     <p v-if="publishedMeta" class="publish-banner">
       게시본 · {{ publishedMeta.at }} · {{ publishedMeta.by }} 게시
+    </p>
+    <p v-else-if="liveRefreshed && report && !loading" class="publish-banner live">
+      라이브 재집계 결과 — 게시본에는 아직 반영되지 않았습니다. 게시하려면 '게시본 갱신'을 누르세요.
     </p>
     <p v-else-if="report && !loading" class="publish-banner live">
       라이브 집계 — 저장된 게시본이 없습니다
