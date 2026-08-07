@@ -121,7 +121,7 @@ const zoneCircles = computed<ZoneCircle[]>(() =>
 
 const visibleZones = computed(() => zoneCircles.value.filter((z) => z.inView))
 
-// ---------- 클릭 팝업 (동그라미당 하나, X/일괄 닫기) ----------
+// ---------- 이벤트 팝업 (권역 전환 시 기본 표시, 동그라미당 하나, X/일괄 닫기) ----------
 // 앵커 주변 후보 방향 (오른쪽 우선)과 점진적 간격
 const LABEL_DIRS: Array<[number, number]> = [
   [1, 0], [1, -0.8], [1, 0.8], [-1, 0], [-1, -0.8], [-1, 0.8], [0, -1], [0, 1],
@@ -176,8 +176,15 @@ function closeAllPopups(): void {
   openPopups.value = []
 }
 
-// 권역 변경 시 좌표가 달라지므로 열린 팝업 초기화
-watch(activeRegion, closeAllPopups)
+// 권역 전환(및 최초 표시) 시 팝업 상태를 리셋하고 해당 권역의 모든 이벤트 팝업을 기본 표시
+// 배치는 popupBoxes의 기존 겹침 방지 로직(LABEL_DIRS/LABEL_GAPS)을 그대로 사용
+watch(
+  activeRegion,
+  () => {
+    openPopups.value = visibleZones.value.map((z) => z.key)
+  },
+  { immediate: true },
+)
 
 interface PopupBox extends LabelRect {
   key: string
@@ -368,7 +375,7 @@ defineExpose({ getSvgHtml })
           <span class="legend-dot solid-demo"></span>
           진행 중(실선) / 완화·해소(점선)
         </span>
-        <span class="legend-item">동그라미 클릭 시 이벤트 팝업</span>
+        <span class="legend-item">팝업 기본 표시 · 동그라미 클릭으로 열기/닫기</span>
       </div>
       <div class="footer-right">
         <span class="region-note">{{ region.label }} 기준 · 이벤트 {{ visibleZones.length }}개 영향권</span>

@@ -242,23 +242,29 @@ function rowCellText(row: LeadtimeRow | undefined, month: string): string {
   return value === undefined ? '' : String(value)
 }
 
-/** 전월 대비 증감 — 같은 행에서 현재 월 이전에 값이 있는 가장 가까운 월과 비교 */
-function cellDelta(row: LeadtimeRow | undefined, monthKey: string): number | null {
-  if (!row || !report.value) return null
-  const current = row.cells[monthKey]
-  if (current === undefined || current === null) return null
+/** 현재 월 이전에 값이 있는 가장 가까운 월의 값 */
+function prevCellValue(row: LeadtimeRow, monthKey: string): number | null {
+  if (!report.value) return null
   const cols = report.value.month_columns
   const idx = cols.findIndex((c) => c.key === monthKey)
   for (let i = idx - 1; i >= 0; i -= 1) {
     const prevCol = cols[i]
     if (!prevCol) continue
     const prev = row.cells[prevCol.key]
-    if (prev !== undefined && prev !== null) {
-      const delta = Math.round((current - prev) * 10) / 10
-      return delta === 0 ? null : delta
-    }
+    if (prev !== undefined && prev !== null) return prev
   }
   return null
+}
+
+/** 전월 대비 증감 — 같은 행에서 현재 월 이전에 값이 있는 가장 가까운 월과 비교 */
+function cellDelta(row: LeadtimeRow | undefined, monthKey: string): number | null {
+  if (!row) return null
+  const current = row.cells[monthKey]
+  if (current === undefined || current === null) return null
+  const prev = prevCellValue(row, monthKey)
+  if (prev === null) return null
+  const delta = Math.round((current - prev) * 10) / 10
+  return delta === 0 ? null : delta
 }
 
 function formatDelta(delta: number | null): string {
@@ -266,39 +272,51 @@ function formatDelta(delta: number | null): string {
   return `${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}`
 }
 
-interface MomHighlight {
-  label: string
+function formatSignedDelta(delta: number): string {
+  return `Δ${delta > 0 ? '+' : '-'}${Math.abs(delta)}일`
+}
+
+interface RegionHighlight {
+  label: string // 항로명(첫 열 구분자 값)
+  prev: number
   value: number
   delta: number
 }
 
-/** 최신 실적 월 기준 전월 대비 변동 상위 3개 항로 (Avg 행만, 고정 행 제외) */
-const momHighlights = computed<MomHighlight[]>(() => {
+/** 권역(유럽/미주/아시아)별 최신 실적 월 기준 전월 대비 변동(|delta|)이 가장 큰 항로 1개씩 (Avg 행만, 고정 행 제외) */
+const regionHighlights = computed<Array<{ region: string; item: RegionHighlight | null }>>(() => {
   const r = report.value
   if (!r) return []
   const actualCols = r.month_columns.filter((c) => c.kind === 'actual')
   const latestCol = actualCols[actualCols.length - 1]
-  if (!latestCol) return []
-  const latest = latestCol.key
-  const highlights: MomHighlight[] = []
-  for (const group of r.groups) {
-    for (const block of countryBlocks(group)) {
-      if (block.fixed) continue
-      const row = block.rowsByStat.Avg
-      const current = row?.cells[latest]
-      if (current === undefined || current === null) continue
-      const delta = cellDelta(row, latest)
-      if (delta === null) continue
-      highlights.push({
-        label: `${group.name} · ${block.label}`,
-        value: current,
-        delta,
-      })
+  const bestByRegion = new Map<string, RegionHighlight>()
+  if (latestCol) {
+    const latest = latestCol.key
+    for (const group of r.groups) {
+      const region = group.region || '기타'
+      for (const block of countryBlocks(group)) {
+        if (block.fixed) continue
+        const row = block.rowsByStat.Avg
+        if (!row) continue
+        const current = row.cells[latest]
+        if (current === undefined || current === null) continue
+        const prev = prevCellValue(row, latest)
+        if (prev === null) continue
+        const delta = Math.round((current - prev) * 10) / 10
+        if (delta === 0) continue
+        const best = bestByRegion.get(region)
+        if (!best || Math.abs(delta) > Math.abs(best.delta)) {
+          bestByRegion.set(region, {
+            label: `${group.name}(${block.label})`,
+            prev,
+            value: current,
+            delta,
+          })
+        }
+      }
     }
   }
-  return highlights
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-    .slice(0, 3)
+  return REGION_ORDER.map((name) => ({ region: name, item: bestByRegion.get(name) ?? null }))
 })
 
 const highlightMonthLabel = computed<string>(() => {
@@ -334,17 +352,6 @@ const regionSections = computed<RegionSection[]>(() => {
     .map(([name, groups]) => ({ name, groups }))
 })
 
-// ---------- KPI 요약 카드 ----------
-interface KpiSummary {
-  activeEvents: number
-  topChange: MomHighlight | null
-}
-
-const kpis = computed<KpiSummary>(() => ({
-  activeEvents: approvedZones.value.filter((e) => e.status === 'ACTIVE').length,
-  topChange: momHighlights.value[0] ?? null,
-}))
-
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -357,7 +364,6 @@ function doPrint() {
 function exportHtml() {
   if (!report.value) return
   const r = report.value
-  const k = kpis.value
   const sections = regionSections.value
     .map((section) => {
       const groupsHtml = section.groups
@@ -412,19 +418,19 @@ ${sectionsHtml}
 <h3>익월 체크 포인트</h3><ul>${points}</ul>
 <p class="disclaimer">${escapeHtml(draft.draft.disclaimer)}</p></div>`
   })()
-  const highlightsHtml = momHighlights.value.length
-    ? `<div class="hl-grid">${momHighlights.value
-        .map((h) => `<div class="card hl-card ${h.delta > 0 ? 'hl-up' : 'hl-down'}">
-<div class="hl-label">${escapeHtml(h.label)}</div>
-<div class="hl-value">${h.value}<span class="hl-unit">일</span></div>
-<div class="hl-delta ${h.delta > 0 ? 'up' : 'down'}">전월 대비 ${h.delta > 0 ? '▲' : '▼'}${Math.abs(h.delta)}</div>
-</div>`)
-        .join('')}</div>`
-    : ''
-  const kpiHtml = `<div class="kpi-grid">
-<div class="card kpi"><div class="kpi-label">최대 변동 항로</div><div class="kpi-value kpi-text">${k.topChange ? escapeHtml(k.topChange.label) : '-'}</div><div class="kpi-sub ${k.topChange && k.topChange.delta > 0 ? 'up' : 'down'}">${k.topChange ? `전월 대비 ${k.topChange.delta > 0 ? '▲' : '▼'}${Math.abs(k.topChange.delta)}` : ''}</div></div>
-<div class="card kpi ${k.activeEvents > 0 ? 'kpi-warn' : ''}"><div class="kpi-label">진행 중 MI 이벤트</div><div class="kpi-value">${k.activeEvents}<span class="kpi-unit">건</span></div><div class="kpi-sub">승인 이벤트 기준</div></div>
+  const regionChangesHtml = `<div class="card"><h2>금월 핵심 변동 (${escapeHtml(highlightMonthLabel.value)} 기준 · 권역별 전월 대비 최대 변동 항로)</h2><div class="hl-grid">${regionHighlights.value
+    .map((h) => {
+      if (!h.item) {
+        return `<div class="card hl-card"><div class="hl-label">${escapeHtml(h.region)}</div><div class="hl-empty">데이터 없음</div></div>`
+      }
+      const item = h.item
+      return `<div class="card hl-card ${item.delta > 0 ? 'hl-up' : 'hl-down'}">
+<div class="hl-label">${escapeHtml(h.region)} — ${escapeHtml(item.label)}</div>
+<div class="hl-value">${item.prev}<span class="hl-unit">일</span> → ${item.value}<span class="hl-unit">일</span></div>
+<div class="hl-delta ${item.delta > 0 ? 'up' : 'down'}">전월 대비 ${item.delta > 0 ? 'Δ+' : 'Δ-'}${Math.abs(item.delta)}일</div>
 </div>`
+    })
+    .join('')}</div></div>`
   const eventsHtml = sortedApprovedEvents.value.length
     ? `<div class="card"><h2>승인 MI 이벤트 (리드타임 원인 참고)</h2><table><thead><tr><th>상태</th><th>심각도</th><th>헤드라인</th><th>영향 지역</th><th>기간</th></tr></thead><tbody>${sortedApprovedEvents.value
         .map((ev) => `<tr><td><span class="status-badge status-${ev.status.toLowerCase()}">${statusLabel(ev.status)}</span></td><td>${escapeHtml(ev.severity)}</td><td class="headline">${escapeHtml(ev.headline)}</td><td>${escapeHtml(zoneLocationNames(ev))}</td><td>${escapeHtml(zonePeriod(ev))}</td></tr>`)
@@ -442,15 +448,6 @@ body{font-family:'Malgun Gothic','Pretendard',sans-serif;margin:0;padding:32px;c
 h2{font-size:14px;margin:0 0 10px;color:#122033}
 h3{font-size:12px;margin:14px 0 6px;color:#344861}
 .card{background:rgba(255,255,255,.92);border:1px solid rgba(16,42,67,.11);border-radius:14px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,32,54,.08);margin-top:14px}
-.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
-.kpi{margin-top:0;min-height:96px}
-.kpi-blue{background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(6,182,212,.16)),rgba(255,255,255,.92)}
-.kpi-warn{border-color:rgba(249,115,22,.34);background:rgba(249,115,22,.08)}
-.kpi-label{color:#607086;font-size:11px;font-weight:700}
-.kpi-value{margin-top:8px;font-size:28px;font-weight:800;letter-spacing:-.03em}
-.kpi-value.kpi-text{font-size:14px;line-height:1.4}
-.kpi-unit{font-size:12px;font-weight:600;color:#607086;margin-left:3px}
-.kpi-sub{margin-top:4px;font-size:11px;color:#8a98aa}
 .hl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
 .hl-card{margin-top:0}
 .hl-up{border-color:rgba(239,68,68,.34)}
@@ -459,6 +456,7 @@ h3{font-size:12px;margin:14px 0 6px;color:#344861}
 .hl-value{margin-top:8px;font-size:26px;font-weight:800}
 .hl-unit{font-size:12px;color:#607086;margin-left:2px}
 .hl-delta{margin-top:4px;font-size:12px;font-weight:700}
+.hl-empty{margin-top:8px;font-size:12px;color:#8a98aa}
 .up{color:#ef4444}
 .down{color:#10b981}
 .d{font-size:11px;font-weight:700;margin-left:3px}
@@ -507,9 +505,7 @@ td.headline{text-align:left}
 <h1>물류 MI Report — 항로별 리드타임</h1>
 <p class="meta">조회 시점 기준 자동 집계 · 출처: ${escapeHtml(r.source)} · 생성: ${escapeHtml(r.generated_at)}</p>
 </div>
-${kpiHtml}
-${highlightsHtml ? `<div class="card" style="padding-bottom:6px"><h2>금월 핵심 변동 (${escapeHtml(highlightMonthLabel.value)} 기준 · 전월 대비)</h2></div>` : ''}
-${highlightsHtml}
+${regionChangesHtml}
 ${insightHtml}
 ${(() => {
   const svg = reportMap.value?.getSvgHtml()
@@ -591,42 +587,31 @@ ${eventsHtml}
     </p>
 
     <template v-if="report">
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-label">최대 변동 항로</div>
-          <div class="kpi-value kpi-text">{{ kpis.topChange?.label ?? '-' }}</div>
-          <div
-            v-if="kpis.topChange"
-            class="kpi-sub"
-            :class="kpis.topChange.delta > 0 ? 'up' : 'down'"
-          >
-            전월 대비 {{ formatDelta(kpis.topChange.delta) }}
-          </div>
-        </div>
-        <div class="kpi-card" :class="{ 'kpi-warn': kpis.activeEvents > 0 }">
-          <div class="kpi-label">진행 중 MI 이벤트</div>
-          <div class="kpi-value">{{ kpis.activeEvents }}<span class="kpi-unit">건</span></div>
-          <div class="kpi-sub">이벤트 레지스트리 기준</div>
-        </div>
-      </div>
-
-      <section v-if="momHighlights.length" class="panel">
+      <section class="panel">
         <div class="panel-head">
           <h3 class="panel-title">금월 핵심 변동</h3>
-          <span class="panel-meta">{{ highlightMonthLabel }} 기준 · 전월 대비 상위 3개 항로</span>
+          <span class="panel-meta">{{ highlightMonthLabel }} 기준 · 권역별 전월 대비 최대 변동 항로</span>
         </div>
         <div class="hl-grid">
           <div
-            v-for="h in momHighlights"
-            :key="h.label"
+            v-for="h in regionHighlights"
+            :key="h.region"
             class="hl-card"
-            :class="h.delta > 0 ? 'hl-up' : 'hl-down'"
+            :class="h.item ? (h.item.delta > 0 ? 'hl-up' : 'hl-down') : ''"
           >
-            <div class="hl-label">{{ h.label }}</div>
-            <div class="hl-value">{{ h.value }}<span class="hl-unit">일</span></div>
-            <div class="hl-delta" :class="h.delta > 0 ? 'up' : 'down'">
-              전월 대비 {{ formatDelta(h.delta) }}
-            </div>
+            <template v-if="h.item">
+              <div class="hl-label">{{ h.region }} — {{ h.item.label }}</div>
+              <div class="hl-value">
+                {{ h.item.prev }}<span class="hl-unit">일</span> → {{ h.item.value }}<span class="hl-unit">일</span>
+              </div>
+              <div class="hl-delta" :class="h.item.delta > 0 ? 'up' : 'down'">
+                전월 대비 {{ formatSignedDelta(h.item.delta) }}
+              </div>
+            </template>
+            <template v-else>
+              <div class="hl-label">{{ h.region }}</div>
+              <div class="hl-empty">데이터 없음</div>
+            </template>
           </div>
         </div>
       </section>
@@ -843,63 +828,6 @@ ${eventsHtml}
   color: var(--li-blue);
 }
 
-/* ---------- KPI 카드 ---------- */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 980px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.kpi-card {
-  min-height: 96px;
-  padding: 14px 16px;
-  border-radius: var(--li-radius-md);
-  background: var(--li-surface-strong);
-  border: 1px solid var(--li-border);
-  box-shadow: var(--li-shadow-card);
-}
-.kpi-blue {
-  background: var(--li-accent-gradient-soft), var(--li-surface-strong);
-  border-color: rgba(37, 99, 235, 0.22);
-}
-.kpi-warn {
-  border-color: var(--li-risk-high-border);
-  background: var(--li-risk-high-bg), var(--li-surface-strong);
-}
-.kpi-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--li-text-muted);
-}
-.kpi-value {
-  margin-top: 8px;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--li-text);
-}
-.kpi-value.kpi-text {
-  font-size: 13px;
-  line-height: 1.45;
-  letter-spacing: 0;
-}
-.kpi-unit {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--li-text-muted);
-  margin-left: 3px;
-}
-.kpi-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--li-text-faint);
-  font-weight: 700;
-}
-
 /* ---------- 패널 공통 ---------- */
 .region-header {
   display: flex;
@@ -1093,13 +1021,16 @@ td.stat {
 .cell-delta.down {
   background: var(--li-risk-low-bg);
 }
-.kpi-sub.up,
 .hl-delta.up {
   color: var(--li-risk-critical);
 }
-.kpi-sub.down,
 .hl-delta.down {
   color: var(--li-risk-low);
+}
+.hl-empty {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--li-text-faint);
 }
 .cell-input {
   width: 64px;
