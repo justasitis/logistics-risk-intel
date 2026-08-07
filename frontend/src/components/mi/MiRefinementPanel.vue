@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useMiWorkspace } from '../../composables/useMiWorkspace'
-import type { CompanyCode } from '../../types/mi'
+import { useCompanies } from '../../composables/useCompanies'
 
-const { state, checkHealth, refine } = useMiWorkspace()
-const companyOptions: CompanyCode[] = ['SKO', 'SKOH', 'SKBM', 'SKBA', 'SKOJ', 'SKOY']
+const { state, checkHealth, refine, toggleCompanySelection } = useMiWorkspace()
+const { companyCodes: companyOptions } = useCompanies()
 
 onMounted(checkHealth)
-
-function toggleCompany(company: CompanyCode) {
-  const index = state.selectedCompanies.indexOf(company)
-  if (index >= 0) state.selectedCompanies.splice(index, 1)
-  else state.selectedCompanies.push(company)
-}
 </script>
 
 <template>
@@ -29,7 +23,7 @@ function toggleCompany(company: CompanyCode) {
         <input
           type="checkbox"
           :checked="state.selectedCompanies.includes(company)"
-          @change="toggleCompany(company)"
+          @change="toggleCompanySelection(company)"
         />
         {{ company }}
       </label>

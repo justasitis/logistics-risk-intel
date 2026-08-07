@@ -44,6 +44,10 @@ import NotificationCenter from '@/components/NotificationCenter.vue'
 
 import RouteMasterPanel from '@/components/RouteMasterPanel.vue'
 
+import SettingsPanel from '@/components/SettingsPanel.vue'
+
+import { useCompanies } from '@/composables/useCompanies'
+
 import { getRegistryMapZones } from '@/services/miRegistryApi'
 
 import { getCurrentUser } from '@/services/currentUser'
@@ -242,7 +246,7 @@ type WorkspaceMode = 'dashboard' | 'mi' | 'vessel'
 
 const activeWorkspace = ref<
 
-  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'gap' | 'routes'
+  'dashboard' | 'mi' | 'vessel' | 'inventory' | 'report' | 'gap' | 'routes' | 'settings'
 
 >('dashboard')
 
@@ -266,6 +270,10 @@ async function loadCurrentUser() {
   }
 
 }
+
+// 법인 목록 — /api/config/companies 기반 공유 소스 (조회 실패 시 기본값 목록 유지)
+
+const { companies, loadCompanies } = useCompanies()
 
 const now = ref(new Date())
 
@@ -387,23 +395,19 @@ let marinesiaController: AbortController | null = null
 
  
 
-const companyOptions = [
+const companyOptions = computed(() => [
 
   { value: '', label: '전체 법인' },
 
-  { value: 'SKO', label: 'SKO — 한국' },
+  ...companies.value.map((company) => ({
 
-  { value: 'SKBM', label: 'SKBM — 헝가리' },
+    value: company.code,
 
-  { value: 'SKOH', label: 'SKOH — 헝가리' },
+    label: `${company.code} — ${company.label}`,
 
-  { value: 'SKOJ', label: 'SKOJ — 중국' },
+  })),
 
-  { value: 'SKOY', label: 'SKOY — 중국' },
-
-  { value: 'SKBA', label: 'SKBA — 미국' },
-
-]
+])
 
 
  
@@ -2363,6 +2367,8 @@ onMounted(() => {
 
   void loadCurrentUser()
 
+  void loadCompanies()
+
   void loadRegistryZones()
 
   window.addEventListener('mi-registry-changed', handleRegistryChanged)
@@ -2479,6 +2485,27 @@ onBeforeUnmount(() => {
           </button>
 
 
+
+
+          <button
+
+            v-if="canManageMi"
+
+            type="button"
+
+            class="workspace-tab"
+
+            :class="{ active: activeWorkspace === 'settings' }"
+
+            @click="activeWorkspace = 'settings'"
+
+          >
+
+            기준정보
+
+          </button>
+
+
  
 
           <button
@@ -2586,7 +2613,7 @@ onBeforeUnmount(() => {
 
         <label
 
-          v-if="activeWorkspace !== 'mi'"
+          v-if="activeWorkspace !== 'mi' && activeWorkspace !== 'settings'"
 
           class="company-filter"
 
@@ -3071,6 +3098,26 @@ onBeforeUnmount(() => {
     >
 
       <DelayDecompositionPanel />
+
+    </section>
+
+
+
+    <section
+
+      v-else-if="activeWorkspace === 'settings'"
+
+      class="mi-workspace-host"
+
+    >
+
+      <SettingsPanel v-if="canManageMi" />
+
+      <p v-else class="mi-access-denied">
+
+        기준정보 관리는 지정된 담당자만 사용할 수 있습니다.
+
+      </p>
 
     </section>
 

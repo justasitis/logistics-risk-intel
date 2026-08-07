@@ -1,4 +1,4 @@
-import { computed, reactive } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import {
   fetchSharePointExternalCandidates,
   getMiAiHealth,
@@ -20,6 +20,12 @@ import type {
   ReviewResponse,
   ReviewStatus,
 } from '../types/mi'
+
+import { companyCodes } from './useCompanies'
+
+// 법인 목록은 useCompanies(/api/config/companies) 공유 소스를 따른다.
+// 사용자가 직접 선택을 바꾸기 전까지는 전체 법인 선택을 기본값으로 동기화한다.
+let companySelectionTouched = false
 
 export type MiWorkspaceStatus =
   | 'EMPTY'
@@ -49,15 +55,6 @@ export type SharePointCandidateStatus =
   | 'UPDATE_AVAILABLE'
   | 'ERROR'
 
-const ALL_COMPANIES: CompanyCode[] = [
-  'SKO',
-  'SKOH',
-  'SKBM',
-  'SKBA',
-  'SKOJ',
-  'SKOY',
-]
-
 const state = reactive({
   status: 'EMPTY' as MiWorkspaceStatus,
   candidateEnvelope: null as ExternalMiCandidateEnvelope | null,
@@ -66,7 +63,7 @@ const state = reactive({
   analysisId: '',
   refinedEvents: [] as RefinedMiEvent[],
   reviewResult: null as ReviewResponse | null,
-  selectedCompanies: [...ALL_COMPANIES] as CompanyCode[],
+  selectedCompanies: [] as CompanyCode[],
   supplementalContext: '',
   apiConfigured: false,
   error: '',
@@ -91,6 +88,24 @@ const state = reactive({
 let initializationPromise: Promise<void> | null = null
 let sharePointController: AbortController | null = null
 let pendingSharePointResponse: SharePointExternalMiResponse | null = null
+
+// 공유 법인 목록이 로드/변경되면 전체 법인 선택을 기본값으로 맞춘다
+watch(
+  companyCodes,
+  (codes) => {
+    if (!companySelectionTouched) {
+      state.selectedCompanies = [...codes]
+    }
+  },
+  { immediate: true },
+)
+
+function toggleCompanySelection(company: CompanyCode): void {
+  companySelectionTouched = true
+  const index = state.selectedCompanies.indexOf(company)
+  if (index >= 0) state.selectedCompanies.splice(index, 1)
+  else state.selectedCompanies.push(company)
+}
 
 function validateEnvelope(value: unknown): ExternalMiCandidateEnvelope {
   if (!value || typeof value !== 'object') {
@@ -594,6 +609,7 @@ export function useMiWorkspace() {
       ),
     ),
     loadCandidateFile,
+    toggleCompanySelection,
     loadSharePointCandidates,
     applyPendingSharePointCandidates,
     checkHealth,

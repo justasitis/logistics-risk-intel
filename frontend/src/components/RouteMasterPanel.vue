@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { getRouteMaster } from '../services/freightApi'
+import { useCompanies } from '../composables/useCompanies'
 import type { RouteMasterResponse, RouteMasterRow } from '../types/routeMaster'
 
 const DIM_OPTIONS = [
@@ -31,7 +32,8 @@ const BASE_COLUMNS = [
   { key: 'arvl_nm', label: '도착항' },
 ]
 
-const COMPANY_OPTIONS = ['SKO', 'SKOH', 'SKBM', 'SKBA', 'SKOJ', 'SKOY']
+// 법인 목록은 useCompanies(/api/config/companies) 공유 소스를 사용
+const { companyCodes } = useCompanies()
 
 const selectedDims = ref<string[]>(['cmpy_nm'])
 const selectedCompanies = ref<string[]>([])
@@ -197,7 +199,7 @@ function exportCsv() {
       </div>
       <div class="row">
         <span class="label">법인</span>
-        <label v-for="c in COMPANY_OPTIONS" :key="c" class="chk">
+        <label v-for="c in companyCodes" :key="c" class="chk">
           <input
             type="checkbox"
             :checked="selectedCompanies.includes(c)"

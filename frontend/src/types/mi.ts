@@ -1,4 +1,5 @@
-export type CompanyCode = 'SKO' | 'SKOH' | 'SKBM' | 'SKBA' | 'SKOJ' | 'SKOY'
+// 법인 목록은 /api/config/companies 기준정보로 관리되므로 코드 자체는 자유 문자열
+export type CompanyCode = string
 export type ReviewStatus = 'PENDING' | 'APPROVED' | 'EDITED' | 'REJECTED'
 
 export interface Evidence {
