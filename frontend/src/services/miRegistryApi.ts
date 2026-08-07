@@ -32,6 +32,16 @@ export async function rebuildMiRegistry(): Promise<RegistryRebuildResponse> {
   )
 }
 
+/** 승인 MI 이벤트 영향권 — 레지스트리 zone 형식 + 승인 이벤트의 유효 기간 */
+export type ApprovedMapZone = RegistryMapZone & {
+  valid_from: string
+  valid_to: string | null
+}
+
+export async function getApprovedMapZones(): Promise<ApprovedMapZone[]> {
+  return parseResponse(await fetch(`${API_BASE}/api/mi/approved/map-zones`))
+}
+
 export async function getRegistryMapZones(): Promise<RegistryMapZone[]> {
   return parseResponse(await fetch(`${API_BASE}/api/mi/registry/map-zones`))
 }

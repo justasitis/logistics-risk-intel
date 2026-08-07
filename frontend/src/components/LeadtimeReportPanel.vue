@@ -8,8 +8,8 @@ import {
   publishReportSnapshot,
   putLeadtimeOverrides,
 } from '../services/leadtimeApi'
-import { getMiRegistry, getRegistryMapZones } from '../services/miRegistryApi'
-import type { RegistryMapZone } from '../services/miUpload'
+import { getApprovedMapZones } from '../services/miRegistryApi'
+import type { ApprovedMapZone } from '../services/miRegistryApi'
 import type { EtaAtaGapResponse, GapGroupSummary } from '../types/gap'
 import type {
   InsightDraftResponse,
@@ -18,7 +18,6 @@ import type {
   LeadtimeRow,
   ReportSnapshot,
 } from '../types/leadtime'
-import type { RegistryEvent, RegistryStatus } from '../types/miRegistry'
 import FreightIndicesChart from './FreightIndicesChart.vue'
 import MiInsightDraftPanel from './MiInsightDraftPanel.vue'
 import MiReportMap from './MiReportMap.vue'
@@ -31,32 +30,40 @@ const insight = ref<InsightDraftResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
 
-// MI 이벤트 레지스트리 (리드타임 원인 참고 표)
-const registryEvents = ref<RegistryEvent[]>([])
-// 레지스트리 영향권 (리포트 지도 표시용)
-const registryZones = ref<RegistryMapZone[]>([])
+// 승인 MI 이벤트 영향권 — 리포트 지도와 이벤트 목록이 같은 소스를 공유
+const approvedZones = ref<ApprovedMapZone[]>([])
 
-const STATUS_LABELS: Record<RegistryStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   ACTIVE: '진행 중',
+  WATCH: '주시',
   IMPROVING: '완화',
   RESOLVED: '해소',
 }
-const STATUS_ORDER: Record<RegistryStatus, number> = {
+const STATUS_ORDER: Record<string, number> = {
   ACTIVE: 0,
-  IMPROVING: 1,
-  RESOLVED: 2,
+  WATCH: 1,
+  IMPROVING: 2,
+  RESOLVED: 3,
 }
 
-function statusLabel(status: RegistryStatus): string {
+function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status
 }
 
-const sortedRegistryEvents = computed<RegistryEvent[]>(() =>
-  [...registryEvents.value].sort((a, b) => {
+const sortedApprovedEvents = computed<ApprovedMapZone[]>(() =>
+  [...approvedZones.value].sort((a, b) => {
     const byStatus = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
-    return byStatus !== 0 ? byStatus : b.last_seen.localeCompare(a.last_seen)
+    return byStatus !== 0 ? byStatus : b.valid_from.localeCompare(a.valid_from)
   }),
 )
+
+function zoneLocationNames(zone: ApprovedMapZone): string {
+  return zone.locations.map((loc) => loc.name).join(', ') || '-'
+}
+
+function zonePeriod(zone: ApprovedMapZone): string {
+  return `${zone.valid_from || '-'} ~ ${zone.valid_to ?? '진행 중'}`
+}
 
 // 셀 수동 편집 (서버 override 파일에 명시 저장)
 const editMode = ref(false)
@@ -144,22 +151,16 @@ async function publish() {
   }
 }
 
-async function loadRegistry() {
+async function loadApprovedEvents() {
   try {
-    const res = await getMiRegistry()
-    registryEvents.value = res.events
+    approvedZones.value = await getApprovedMapZones()
   } catch {
-    registryEvents.value = []
-  }
-  try {
-    registryZones.value = await getRegistryMapZones()
-  } catch {
-    registryZones.value = []
+    approvedZones.value = []
   }
 }
 
 onMounted(load)
-onMounted(loadRegistry)
+onMounted(loadApprovedEvents)
 
 function cellKey(groupId: string, country: string, stat: string, month: string): string {
   return `${groupId}|${country}|${stat}|${month}`
@@ -340,7 +341,7 @@ interface KpiSummary {
 }
 
 const kpis = computed<KpiSummary>(() => ({
-  activeEvents: registryEvents.value.filter((e) => e.status === 'ACTIVE').length,
+  activeEvents: approvedZones.value.filter((e) => e.status === 'ACTIVE').length,
   topChange: momHighlights.value[0] ?? null,
 }))
 
@@ -422,11 +423,11 @@ ${sectionsHtml}
     : ''
   const kpiHtml = `<div class="kpi-grid">
 <div class="card kpi"><div class="kpi-label">최대 변동 항로</div><div class="kpi-value kpi-text">${k.topChange ? escapeHtml(k.topChange.label) : '-'}</div><div class="kpi-sub ${k.topChange && k.topChange.delta > 0 ? 'up' : 'down'}">${k.topChange ? `전월 대비 ${k.topChange.delta > 0 ? '▲' : '▼'}${Math.abs(k.topChange.delta)}` : ''}</div></div>
-<div class="card kpi ${k.activeEvents > 0 ? 'kpi-warn' : ''}"><div class="kpi-label">진행 중 MI 이벤트</div><div class="kpi-value">${k.activeEvents}<span class="kpi-unit">건</span></div><div class="kpi-sub">이벤트 레지스트리 기준</div></div>
+<div class="card kpi ${k.activeEvents > 0 ? 'kpi-warn' : ''}"><div class="kpi-label">진행 중 MI 이벤트</div><div class="kpi-value">${k.activeEvents}<span class="kpi-unit">건</span></div><div class="kpi-sub">승인 이벤트 기준</div></div>
 </div>`
-  const eventsHtml = sortedRegistryEvents.value.length
-    ? `<div class="card"><h2>MI 이벤트 레지스트리 (리드타임 원인 참고)</h2><table><thead><tr><th>상태</th><th>심각도</th><th>헤드라인</th><th>지역/회랑</th><th>기간</th></tr></thead><tbody>${sortedRegistryEvents.value
-        .map((ev) => `<tr><td><span class="status-badge status-${ev.status.toLowerCase()}">${statusLabel(ev.status)}</span></td><td>${escapeHtml(ev.severity)}</td><td class="headline">${escapeHtml(ev.headline)}</td><td>${escapeHtml([...ev.locations, ...ev.corridors].join(', ') || '-')}</td><td>${escapeHtml(ev.first_seen)} ~ ${escapeHtml(ev.last_seen)}</td></tr>`)
+  const eventsHtml = sortedApprovedEvents.value.length
+    ? `<div class="card"><h2>승인 MI 이벤트 (리드타임 원인 참고)</h2><table><thead><tr><th>상태</th><th>심각도</th><th>헤드라인</th><th>영향 지역</th><th>기간</th></tr></thead><tbody>${sortedApprovedEvents.value
+        .map((ev) => `<tr><td><span class="status-badge status-${ev.status.toLowerCase()}">${statusLabel(ev.status)}</span></td><td>${escapeHtml(ev.severity)}</td><td class="headline">${escapeHtml(ev.headline)}</td><td>${escapeHtml(zoneLocationNames(ev))}</td><td>${escapeHtml(zonePeriod(ev))}</td></tr>`)
         .join('')}</tbody></table></div>`
     : ''
   const html = `<!DOCTYPE html>
@@ -481,6 +482,7 @@ ul{font-size:11px;color:#607086}
 .disclaimer{margin:12px 0 0;font-size:11px;color:#b45309;background:rgba(245,158,11,.12);border:1px solid rgba(180,83,9,.28);border-radius:999px;display:inline-block;padding:4px 12px}
 .status-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid transparent;white-space:nowrap}
 .status-active{background:rgba(249,115,22,.14);color:#f97316;border-color:rgba(249,115,22,.34)}
+.status-watch{background:rgba(37,99,235,.13);color:#2563eb;border-color:rgba(37,99,235,.31)}
 .status-improving{background:rgba(6,182,212,.13);color:#06b6d4;border-color:rgba(6,182,212,.31)}
 .status-resolved{background:rgba(16,185,129,.13);color:#10b981;border-color:rgba(16,185,129,.31)}
 td.headline{text-align:left}
@@ -629,7 +631,7 @@ ${eventsHtml}
         </div>
       </section>
 
-      <MiReportMap v-if="registryZones.length" ref="reportMap" :zones="registryZones" />
+      <MiReportMap v-if="approvedZones.length" ref="reportMap" :zones="approvedZones" />
 
       <MiInsightDraftPanel v-model:draft="insight" :can-edit="canPublish" />
 
@@ -710,9 +712,9 @@ ${eventsHtml}
         </section>
       </template>
 
-      <section v-if="sortedRegistryEvents.length" class="panel">
+      <section v-if="sortedApprovedEvents.length" class="panel">
         <div class="panel-head">
-          <h3 class="panel-title">MI 이벤트 레지스트리</h3>
+          <h3 class="panel-title">승인 MI 이벤트</h3>
           <span class="panel-meta">리드타임 원인 참고 · 상태순 정렬</span>
         </div>
         <div class="table-wrap events-scroll">
@@ -722,12 +724,12 @@ ${eventsHtml}
                 <th>상태</th>
                 <th>심각도</th>
                 <th>헤드라인</th>
-                <th>지역/회랑</th>
+                <th>영향 지역</th>
                 <th>기간</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="ev in sortedRegistryEvents" :key="ev.event_id">
+              <tr v-for="ev in sortedApprovedEvents" :key="ev.event_id">
                 <td>
                   <span class="status-badge" :class="ev.status.toLowerCase()">
                     {{ statusLabel(ev.status) }}
@@ -735,8 +737,8 @@ ${eventsHtml}
                 </td>
                 <td>{{ ev.severity }}</td>
                 <td class="headline">{{ ev.headline }}</td>
-                <td>{{ [...ev.locations, ...ev.corridors].join(', ') || '-' }}</td>
-                <td class="period">{{ ev.first_seen }} ~ {{ ev.last_seen }}</td>
+                <td>{{ zoneLocationNames(ev) }}</td>
+                <td class="period">{{ zonePeriod(ev) }}</td>
               </tr>
             </tbody>
           </table>
@@ -1145,6 +1147,11 @@ td.period {
   background: var(--li-risk-high-bg);
   color: var(--li-risk-high);
   border-color: var(--li-risk-high-border);
+}
+.status-badge.watch {
+  background: var(--li-risk-watch-bg);
+  color: var(--li-risk-watch);
+  border-color: var(--li-risk-watch-border);
 }
 .status-badge.improving {
   background: var(--li-risk-watch-bg);

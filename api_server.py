@@ -1561,6 +1561,20 @@ def get_mi_registry_map_zones() -> list[dict[str, Any]]:
         ) from exc
 
 
+@app.get("/api/mi/approved/map-zones")
+def get_mi_approved_map_zones() -> list[dict[str, Any]]:
+    """최신 승인(canonical) MI 이벤트의 지도 영향권 (정제·승인 완료분)."""
+    from backend.app.services import mi_approved_map
+
+    try:
+        return mi_approved_map.approved_map_zones()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="승인 이벤트 영향권 조회에 실패했습니다.",
+        ) from exc
+
+
 @app.get("/api/mi/registry/{event_id}")
 def get_mi_registry_event(event_id: str) -> dict[str, Any]:
     """MI 이벤트 레지스트리 단건 조회."""
