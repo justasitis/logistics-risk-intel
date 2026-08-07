@@ -272,6 +272,21 @@ def build_verdict(
     return "평범합니다. 상단 꼬리만 주시하세요.", "neutral"
 
 
+def list_delay_groups(
+    groups: list[dict[str, Any]] | None = None,
+) -> list[dict[str, str]]:
+    """집계 대상 항로 그룹(id+name) 목록 — 외부 호출 없음(드롭다운용)."""
+    if groups is None:
+        groups = load_route_groups()
+    available = [
+        {"group_id": g["group_id"], "name": g.get("name", g["group_id"])}
+        for g in groups
+        if g.get("group_id") in TARGET_GROUP_IDS
+    ]
+    available.sort(key=lambda g: TARGET_GROUP_IDS.index(g["group_id"]))
+    return available
+
+
 def _carrier_payload(
     code: str,
     name: str,
@@ -381,14 +396,7 @@ def compute_delay_decomposition(
     if target is None:
         raise ValueError(f"항로 그룹 설정 없음: {group_id}")
 
-    available_groups = [
-        {"group_id": g["group_id"], "name": g.get("name", g["group_id"])}
-        for g in groups
-        if g.get("group_id") in TARGET_GROUP_IDS
-    ]
-    available_groups.sort(
-        key=lambda g: TARGET_GROUP_IDS.index(g["group_id"]),
-    )
+    available_groups = list_delay_groups(groups)
 
     window = _month_window(today, months)
     first = compute_first_schedules(history_df)

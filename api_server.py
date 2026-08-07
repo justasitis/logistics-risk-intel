@@ -1029,6 +1029,18 @@ def eta_ata_gap_report(
         ) from exc
 
 
+# 주의: /groups는 /delay-decomposition보다 먼저 등록해 경로 충돌을 피한다.
+@app.get("/api/anomaly/delay-decomposition/groups")
+def delay_decomposition_groups() -> dict[str, Any]:
+    """지연 분해 대상 항로 그룹 목록 — 데이터레이크 호출 없는 경량 엔드포인트.
+
+    첫 조회 전 드롭다운을 채우기 위한 설정값 조회.
+    """
+    from services.delay_decomposition_service import list_delay_groups
+
+    return {"groups": list_delay_groups()}
+
+
 @app.get("/api/anomaly/delay-decomposition")
 def delay_decomposition_report(
     group_id: str = Query(default="ADRIA_SUEZ"),

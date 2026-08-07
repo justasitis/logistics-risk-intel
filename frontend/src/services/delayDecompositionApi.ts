@@ -1,4 +1,7 @@
-import type { DelayDecompositionResponse } from '../types/delayDecomposition'
+import type {
+  DelayDecompositionGroupOption,
+  DelayDecompositionResponse,
+} from '../types/delayDecomposition'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -14,6 +17,15 @@ async function parseResponse<T>(response: Response): Promise<T> {
     throw new Error(detail)
   }
   return response.json() as Promise<T>
+}
+
+export async function getDelayDecompositionGroups(): Promise<
+  DelayDecompositionGroupOption[]
+> {
+  const body = await parseResponse<{ groups: DelayDecompositionGroupOption[] }>(
+    await fetch(`${API_BASE}/api/anomaly/delay-decomposition/groups`),
+  )
+  return body.groups
 }
 
 export async function getDelayDecomposition(params: {

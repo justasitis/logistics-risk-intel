@@ -1,10 +1,14 @@
 """도착지연 분해 & 선사 정시성 집계 테스트 (가짜 DataFrame, 외부 호출 없음)."""
 from datetime import date, timedelta
 
+import httpx
 import pandas as pd
 import pytest
 
 from services import delay_decomposition_service as svc
+
+# TestClient는 앱 내부(ASGI) 호출 — conftest의 httpx 차단 복원용 원본
+_REAL_HTTPX_REQUEST = httpx.Client.request
 from services.leadtime_report_service import _percentile
 
 TODAY = date(2026, 8, 5)
@@ -383,3 +387,46 @@ def test_fetch_wrapper_monkeypatched(monkeypatch):
 
     with pytest.raises(ValueError):
         svc.fetch_delay_decomposition(group_id="EU_INLAND", today=TODAY)
+
+
+# 10. 그룹 목록 경량 조회 — 외부 호출 없음
+def test_list_delay_groups_order_and_fields():
+    groups = svc.list_delay_groups(GROUPS)
+    # GROUPS 픽스처는 2개만 포함 — TARGET 순서 유지, id+name만 반환
+    assert groups == [
+        {"group_id": "ADRIA_SUEZ", "name": "아드리아해 / 수에즈"},
+        {"group_id": "ADRIA_CAPE", "name": "아드리아해 / 희망봉"},
+    ]
+    # name이 없으면 group_id로 대체
+    fallback = svc.list_delay_groups([{"group_id": "US_EAST"}])
+    assert fallback == [{"group_id": "US_EAST", "name": "US_EAST"}]
+    # 집계 결과의 available_groups와 동일 함수를 쓴다.
+    voyages = [_voyage(f"T{i:03d}", dep=1, voy=1) for i in range(3)]
+    info_df, history_df = _build(voyages)
+    report = svc.compute_delay_decomposition(
+        info_df,
+        history_df,
+        group_id="ADRIA_SUEZ",
+        months=12,
+        today=TODAY,
+        groups=GROUPS,
+        thresholds=THRESHOLDS,
+    )
+    assert report["available_groups"] == svc.list_delay_groups(GROUPS)
+
+
+def test_delay_decomposition_groups_endpoint():
+    from fastapi.testclient import TestClient
+
+    from api_server import app
+
+    # TestClient는 앱 내부(ASGI) 호출 — conftest의 httpx 차단 복원
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(httpx.Client, "request", _REAL_HTTPX_REQUEST)
+        client = TestClient(app)
+        res = client.get("/api/anomaly/delay-decomposition/groups")
+    assert res.status_code == 200
+    groups = res.json()["groups"]
+    ids = [g["group_id"] for g in groups]
+    assert ids == svc.TARGET_GROUP_IDS
+    assert all(g["name"] for g in groups)

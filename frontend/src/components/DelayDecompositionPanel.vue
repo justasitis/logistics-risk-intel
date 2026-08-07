@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
-import { getDelayDecomposition } from '../services/delayDecompositionApi'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  getDelayDecomposition,
+  getDelayDecompositionGroups,
+} from '../services/delayDecompositionApi'
 import type {
   DelayDecompositionCarrier,
+  DelayDecompositionGroupOption,
   DelayDecompositionResponse,
   DelayDecompositionVoyage,
 } from '../types/delayDecomposition'
@@ -12,6 +16,8 @@ const loading = ref(false)
 const error = ref('')
 const selectedGroup = ref('')
 const months = ref<number>(12)
+// 마운트 시 채우는 그룹 목록 (집계 조회 전 드롭다운 표시용)
+const groups = ref<DelayDecompositionGroupOption[]>([])
 
 // 애니메이션 상태
 const splitOn = ref(false)
@@ -29,7 +35,9 @@ function clearTimers() {
 
 onBeforeUnmount(clearTimers)
 
-const groupOptions = computed(() => data.value?.available_groups ?? [])
+const groupOptions = computed(
+  () => groups.value.length > 0 ? groups.value : (data.value?.available_groups ?? []),
+)
 const headline = computed(() => data.value?.headline ?? null)
 
 const maxShots = computed(() =>
@@ -180,6 +188,20 @@ function playAnimation() {
 }
 
 // ── 조회 (명시적 조회만 — 마운트 자동 조회 없음) ──
+// 마운트 시에는 드롭다운용 그룹 목록(설정값)만 조회하고 첫 그룹을 기본 선택한다.
+onMounted(async () => {
+  try {
+    const list = await getDelayDecompositionGroups()
+    groups.value = list
+    const first = list[0]
+    if (!selectedGroup.value && first) {
+      selectedGroup.value = first.group_id
+    }
+  } catch {
+    // 목록 조회 실패 시 집계 응답의 available_groups로 대체 표시한다.
+  }
+})
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -356,11 +378,33 @@ async function load() {
           건입니다.
         </div>
 
+        <ul class="ddp-mguide">
+          <li>
+            <b>P50 (중앙값)</b>
+            <span>항차의 가운데 값 — 선사의 '보통' 항해 증감입니다.</span>
+          </li>
+          <li>
+            <b>IQR (P25~P75)</b>
+            <span>가운데 50% 항차의 폭 — 좁을수록 계획 가능합니다.</span>
+          </li>
+          <li>
+            <b>P90</b>
+            <span>상위 10% 경계 — 이 값을 넘는 항차는 붉은 점입니다.</span>
+          </li>
+        </ul>
+
         <div class="ddp-bar">
           <button class="ddp-btn" @click="playAnimation">항차 발사</button>
           <span class="ddp-hint"
             >최근 {{ data.months }}개월 항차를 순서대로 착탄시킵니다</span
           >
+        </div>
+
+        <div class="ddp-legend">
+          <i><span class="ddp-sw"></span>항차 1건</i>
+          <i><span class="ddp-sw ddp-sw--out"></span>P90 초과</i>
+          <i><span class="ddp-swb"></span>중간 50% (IQR)</i>
+          <i><span class="ddp-swl"></span>중앙값</i>
         </div>
 
         <div class="ddp-scale">
@@ -406,7 +450,7 @@ async function load() {
                 ></div>
                 <div
                   v-for="(v, i) in c.voyages"
-                  :key="v.hbl_no"
+                  :key="`${c.carrier_code}-${v.hbl_no}-${i}`"
                   class="ddp-dot"
                   :class="{ on: i < firedCount, out: isOutlier(c, v.voyage_delta_days) }"
                   :style="{ left: pos(v.voyage_delta_days) }"
@@ -423,13 +467,6 @@ async function load() {
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="ddp-legend">
-          <i><span class="ddp-sw"></span>항차 1건</i>
-          <i><span class="ddp-sw ddp-sw--out"></span>P90 초과</i>
-          <i><span class="ddp-swb"></span>중간 50% (IQR)</i>
-          <i><span class="ddp-swl"></span>중앙값</i>
         </div>
       </section>
 
@@ -721,7 +758,6 @@ async function load() {
   margin: 18px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--li-border);
-  max-width: 70ch;
   font-size: 13px;
   line-height: 1.8;
   color: var(--li-text-soft);
@@ -813,7 +849,6 @@ async function load() {
 
 .ddp-bridge {
   margin: 20px 0 0;
-  max-width: 70ch;
   font-size: 13px;
   line-height: 1.8;
   color: var(--li-text-soft);
@@ -823,12 +858,35 @@ async function load() {
 .ddp-readnote {
   margin: 16px 0 20px;
   padding: 13px 16px;
-  max-width: 74ch;
   border-left: 3px solid var(--li-blue);
   background: var(--li-surface-strong);
   font-size: 12px;
   line-height: 1.75;
   color: var(--li-text-soft);
+}
+
+.ddp-mguide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--li-text-muted);
+}
+
+.ddp-mguide li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.ddp-mguide b {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--li-text);
 }
 
 .ddp-bar {
@@ -1019,7 +1077,7 @@ async function load() {
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
-  margin-top: 18px;
+  margin: 0 0 10px 190px;
   font-size: 11px;
   color: var(--li-text-muted);
 }
@@ -1084,6 +1142,10 @@ async function load() {
   }
 
   .ddp-scale {
+    margin-left: 0;
+  }
+
+  .ddp-legend {
     margin-left: 0;
   }
 
