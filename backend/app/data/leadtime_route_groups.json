@@ -28,8 +28,7 @@
         {"row_id": "CN", "label": "중국", "field": "dprt", "codes": ["CN*"]},
         {"row_id": "JP", "label": "일본", "field": "dprt", "codes": ["JP*"]},
         {"row_id": "SEA", "label": "동남아", "field": "dprt", "codes": ["MY*", "VN*", "ID*"]},
-        {"row_id": "US", "label": "미주", "field": "dprt", "codes": ["US*"]},
-        {"row_id": "NEU", "label": "북유럽", "field": "dprt", "codes": ["DE*", "PL*", "FI*"]}
+        {"row_id": "US", "label": "미주", "field": "dprt", "codes": ["US*"]}
       ]
     },
     {
@@ -67,7 +66,6 @@
         {"row_id": "KR", "label": "한국", "field": "dprt", "codes": ["KR*"]},
         {"row_id": "JP", "label": "일본", "field": "dprt", "codes": ["JP*"]},
         {"row_id": "ID", "label": "인도네시아", "field": "dprt", "codes": ["ID*"]},
-        {"row_id": "SEA", "label": "동남아", "field": "dprt", "codes": ["MY*", "VN*"]},
         {"row_id": "NEU", "label": "북유럽", "field": "dprt", "codes": ["DE*", "PL*", "FI*"]}
       ]
     },
@@ -81,8 +79,7 @@
       "row_groups": [
         {"row_id": "KR", "label": "한국", "field": "dprt", "codes": ["KR*"]},
         {"row_id": "JP", "label": "일본", "field": "dprt", "codes": ["JP*"]},
-        {"row_id": "ID", "label": "인도네시아", "field": "dprt", "codes": ["ID*"]},
-        {"row_id": "SEA", "label": "동남아", "field": "dprt", "codes": ["MY*", "VN*"]}
+        {"row_id": "ID", "label": "인도네시아", "field": "dprt", "codes": ["ID*"]}
       ]
     },
     {
@@ -122,21 +119,23 @@
           "row_id": "NORTH_CN_CNTR",
           "label": "북중국(컨테이너)",
           "field": "dprt",
-          "codes": ["CNTSN", "CNTAO", "CNDLC", "CNZJG", "CNLYG", "CNDAF", "CNXGA", "CNWEI", "CNQIN", "CNDFG"]
+          "codes": ["CNTSN", "CNTAO", "CNDLC", "CNZJG", "CNLYG", "CNDAF", "CNXGA", "CNWEI", "CNQIN", "CNDFG"],
+          "exclude_field": "arvl",
+          "exclude_codes": ["KRIFT"]
         },
         {
           "row_id": "SOUTH_CN_CNTR",
           "label": "남중국(컨테이너)",
           "field": "dprt",
-          "codes": ["CNSHA", "CNNGB", "CNSZX", "CNSHK", "CNSKO", "CNXAM", "HKHKG"]
-        }
-      ],
-      "fixed_rows": [
+          "codes": ["CNSHA", "CNNGB", "CNSZX", "CNSHK", "CNSKO", "CNXAM", "HKHKG"],
+          "exclude_field": "arvl",
+          "exclude_codes": ["KRIFT"]
+        },
         {
-          "country": "FERRY_NORTH_CN",
-          "country_label": "북중국(훼리)",
-          "values": {"Avg": 1, "Min": 1, "Max": 1},
-          "note": "훼리는 spot성이라 실데이터 집계 불가 — 사용자 제공 고정값"
+          "row_id": "FERRY_NORTH_CN",
+          "label": "북중국(훼리)",
+          "field": "arvl",
+          "codes": ["KRIFT"]
         }
       ]
     }

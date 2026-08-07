@@ -349,14 +349,22 @@ def compute_leadtime_report(
                 if row_groups:
                     # 커스텀 행 구분 (선적구분/출발항만/운송방식 등) —
                     # field는 임의 bl_info 컬럼 (dprt, arvl, trpr_mode 등)
-                    row_keys = [
-                        rg["row_id"]
-                        for rg in row_groups
-                        if _code_match(
+                    # exclude_field/exclude_codes가 있으면 해당 행은 제외
+                    # (예: 훼리 도착항은 컨테이너 행에서 제외하고 훼리 행으로)
+                    row_keys = []
+                    for rg in row_groups:
+                        if not _code_match(
                             str(row.get(rg.get("field", "dprt")) or ""),
                             rg.get("codes", []),
-                        )
-                    ]
+                        ):
+                            continue
+                        excl_field = rg.get("exclude_field")
+                        if excl_field and _code_match(
+                            str(row.get(excl_field) or ""),
+                            rg.get("exclude_codes", []),
+                        ):
+                            continue
+                        row_keys.append(rg["row_id"])
                 else:
                     if country is None:
                         continue

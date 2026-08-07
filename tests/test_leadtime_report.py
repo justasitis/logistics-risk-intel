@@ -567,8 +567,8 @@ def test_eu_north_group_deham():
     assert _cell(report, "EU_NORTH", "KR", "Avg", "2026-05") == 31.0
 
 
-def test_us_east_sea_row_malaysia_dprt():
-    """MYBKI 출발 미주 동안 → US_EAST의 동남아(SEA) 행으로 집계."""
+def test_us_east_malaysia_dprt_not_aggregated():
+    """MYBKI 출발 미주 동안 — 동남아 행 제거(사용자 지시)로 미집계."""
     df = pd.DataFrame([
         _row(
             dprt="MYBKI", arvl="USSAV", stopby="",
@@ -576,7 +576,39 @@ def test_us_east_sea_row_malaysia_dprt():
         ),
     ])
     report = _real_report(df)
-    assert _cell(report, "US_EAST", "SEA", "Avg", "2026-05") == 51.0
+    group = next(
+        g for g in report["groups"] if g["group_id"] == "US_EAST"
+    )
+    assert all(r["country"] != "SEA" for r in group["rows"])
+
+
+def test_ferry_row_actual_values_not_fixed():
+    """KRIFT(인천훼리터미널) 도착은 북중국(훼리) 행에 실측 집계 — 고정값 아님.
+    컨테이너 행과 중복 집계되지 않는다 (exclude)."""
+    df = pd.DataFrame([
+        # 훼리: 청도 → 인천훼리터미널 (1일)
+        _row(
+            dprt="CNQIN", arvl="KRIFT", stopby="",
+            onboard_date="2026-05-01", ata="2026-05-02",
+        ),
+        # 같은 출발항의 컨테이너: 청도 → 인천항 (3일)
+        _row(
+            dprt="CNQIN", arvl="KRINC", stopby="",
+            onboard_date="2026-05-01", ata="2026-05-04",
+        ),
+    ])
+    report = _real_report(df)
+    assert _cell(report, "CHINA_TO_KOREA", "FERRY_NORTH_CN", "Avg", "2026-05") == 1.0
+    assert _cell(report, "CHINA_TO_KOREA", "NORTH_CN_CNTR", "Avg", "2026-05") == 3.0
+    # 훼리 행은 실측이라 fixed 플래그가 없어야 한다
+    group = next(
+        g for g in report["groups"] if g["group_id"] == "CHINA_TO_KOREA"
+    )
+    ferry = next(
+        r for r in group["rows"]
+        if r["country"] == "FERRY_NORTH_CN" and r["stat"] == "Avg"
+    )
+    assert not ferry.get("fixed")
 
 
 def test_cndfg_north_china_cntr_row():
