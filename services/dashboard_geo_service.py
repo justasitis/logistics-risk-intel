@@ -16,6 +16,7 @@ from typing import Any
 
 import pandas as pd
 
+from services.geo_antimeridian import normalize_geometry_antimeridian
 from services.map_builder import (
     _get_great_circle_points,
     _get_sea_route,
@@ -197,10 +198,14 @@ def build_schedule_map_geojson(
                 "type": "Feature",
                 "id": properties["transport_key"],
                 "properties": properties,
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": [list(point) for point in coordinates],
-                },
+                # searoute는 날짜변경선 통과 경로를 180° 초과 연속 경도로
+                # 반환 — 그대로 두면 태평양 중간에서 끊겨 보이므로 정규화
+                "geometry": normalize_geometry_antimeridian(
+                    {
+                        "type": "LineString",
+                        "coordinates": [list(point) for point in coordinates],
+                    }
+                ),
             }
         )
 
