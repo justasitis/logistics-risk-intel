@@ -39,11 +39,10 @@ def files() -> dict:
 
 
 @router.get("/latest")
-def latest(
-    company: list[str] = Query(default=[]),
-) -> dict:
+def latest() -> dict:
+    # 신규 AIS 포맷에는 company가 없다 — 법인 필터 없이 전체 반환
     try:
-        return read_marinesia_latest(company)
+        return read_marinesia_latest()
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,

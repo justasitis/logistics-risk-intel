@@ -1402,22 +1402,11 @@ async function loadMarinesiaFromSharePoint(
 
   try {
 
-    const companies = selectedCompany.value
-
-      ? [selectedCompany.value]
-
-      : []
-
-
- 
-
     const [health, response] = await Promise.all([
 
       fetchMarinesiaHealth(controller.signal),
 
       fetchMarinesiaLatest(
-
-        companies,
 
         controller.signal,
 

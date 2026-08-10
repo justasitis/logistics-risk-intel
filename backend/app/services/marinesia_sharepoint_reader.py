@@ -32,7 +32,11 @@ _ALLOWED_COMPANIES = {
 
 
 def _allowed_companies() -> set[str]:
-    """허용 법인 코드 집합 — companies 설정 우선, 실패 시 상수 폴터."""
+    """허용 법인 코드 집합 — companies 설정 우선, 실패 시 상수 폴터.
+
+    참고: AIS latest 파이프라인은 신규 포맷에 company가 없어 법인 구분을
+    하지 않는다. 이 헬퍼는 companies 설정 로딩 검증 등 공용 용도로 유지.
+    """
     try:
         from services.config_store import load_companies
 
@@ -275,19 +279,6 @@ def _freshness(
     return "STALE", round(age_hours, 2)
 
 
-def _normalize_company(
-    row: dict[str, Any],
-    settings: MarinesiaSettings,
-) -> tuple[str, bool]:
-    raw_company = _text(row.get("company")).upper()
-
-    if raw_company:
-        return raw_company, False
-
-    # shipment_id is deliberately ignored.
-    return settings.default_company, True
-
-
 def _latest_fetched_at(rows: Iterable[dict[str, Any]]) -> str | None:
     values = [
         parsed
@@ -305,12 +296,17 @@ def _row_to_ais_item(
     row: dict[str, Any],
     index: int,
     settings: MarinesiaSettings,
-) -> tuple[dict[str, Any], bool, bool]:
-    company, company_fallback = _normalize_company(row, settings)
+) -> tuple[dict[str, Any], bool]:
+    # 2026-08 신규 포맷에는 company가 없다 (관리자 1인이 전 법인 선박을
+    # 한 파일로 관리). 구 포맷의 company가 있으면 그대로 보존한다.
+    company = _text(row.get("company")).upper()
     vessel_name = _text(row.get("vessel_name"))
-    query_mmsi = _digits(row.get("query_mmsi_no"))
+    # 신규 포맷은 registered_mmsi_no(마스터 등록 MMSI)가 조회 기준
+    query_mmsi = _digits(row.get("registered_mmsi_no")) or _digits(
+        row.get("query_mmsi_no")
+    )
     response_mmsi = _digits(row.get("mmsi"))
-    imo = _digits(row.get("imo"))
+    imo = _digits(row.get("imo_no")) or _digits(row.get("imo"))
     latitude = _finite_number(row.get("lat"))
     longitude = _finite_number(row.get("lng"))
     observed_at = _parse_datetime(row.get("ts"))
@@ -344,10 +340,13 @@ def _row_to_ais_item(
     heading = _finite_number(row.get("hdt"))
     course = _finite_number(row.get("cog"))
 
+    ais_id_parts = ["MARINESIA"]
+    if company:
+        ais_id_parts.append(company)
+    ais_id_parts.extend([vessel_name, fallback_id])
+
     item = {
-        "ais_id": (
-            f"MARINESIA:{company}:{vessel_name}:{fallback_id}"
-        ),
+        "ais_id": ":".join(ais_id_parts),
         "shipment_id": "",
         "company": company,
         "trpr_no": None,
@@ -390,7 +389,7 @@ def _row_to_ais_item(
         "match_method": None,
     }
 
-    return item, company_fallback, secret_redacted
+    return item, secret_redacted
 
 
 def _summary(items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -442,33 +441,18 @@ def read_marinesia_latest(
         )
 
     rows = _load_json_array(path, resolved.max_file_size_mb)
-    company_filter = {
-        value.strip().upper()
-        for value in (companies or [])
-        if value.strip()
-    }
 
-    unsupported = company_filter - _allowed_companies()
-    if unsupported:
-        raise ValueError(
-            "지원하지 않는 법인 코드: "
-            + ", ".join(sorted(unsupported))
-        )
-
+    # 신규 포맷(2026-08~)에는 company가 없다 — AIS는 법인 구분 없이
+    # 전 법인 선박을 하나의 파일로 관리하므로 법인 필터를 적용하지 않는다.
     items: list[dict[str, Any]] = []
-    fallback_count = 0
     redacted_count = 0
 
     for index, row in enumerate(rows):
-        item, company_fallback, secret_redacted = (
+        item, secret_redacted = (
             _row_to_ais_item(row, index, resolved)
         )
 
-        if company_filter and item["company"] not in company_filter:
-            continue
-
         items.append(item)
-        fallback_count += int(company_fallback)
         redacted_count += int(secret_redacted)
 
     duplicate_pairs = Counter(
@@ -511,11 +495,6 @@ def read_marinesia_latest(
     ]
 
     warnings: list[str] = []
-    if fallback_count:
-        warnings.append(
-            f"company가 없는 {fallback_count}건에 "
-            f"기본 법인 {resolved.default_company}를 적용했습니다."
-        )
     if redacted_count:
         warnings.append(
             f"API 오류 메시지 {redacted_count}건에서 "
@@ -545,7 +524,7 @@ def read_marinesia_latest(
         ),
         "generated_at": _latest_fetched_at(rows),
         "filters": {
-            "companies": sorted(company_filter),
+            "companies": [],
         },
         "items": items,
         "summary": summary,

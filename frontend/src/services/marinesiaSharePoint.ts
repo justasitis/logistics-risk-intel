@@ -94,18 +94,6 @@ async function parseResponse<T>(
   throw new Error(message)
 }
 
-function companyQuery(companies: string[]): string {
-  const params = new URLSearchParams()
-
-  for (const company of companies) {
-    const normalized = company.trim().toUpperCase()
-    if (normalized) params.append('company', normalized)
-  }
-
-  const query = params.toString()
-  return query ? `?${query}` : ''
-}
-
 export async function fetchMarinesiaHealth(
   signal?: AbortSignal,
 ): Promise<MarinesiaHealth> {
@@ -117,13 +105,13 @@ export async function fetchMarinesiaHealth(
   )
 }
 
+// 신규 AIS 포맷에는 company가 없다 — 법인 구분 없이 전체 조회
 export async function fetchMarinesiaLatest(
-  companies: string[] = [],
   signal?: AbortSignal,
 ): Promise<MarinesiaLatestResponse> {
   return parseResponse(
     await fetch(
-      `${API_BASE}/api/marinesia/latest${companyQuery(companies)}`,
+      `${API_BASE}/api/marinesia/latest`,
       { signal },
     ),
   )
