@@ -592,7 +592,7 @@ function saveAisMappings() {
   min-height: 29px;
   padding: 0 10px;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
   border: 0;
   border-radius: 999px;
@@ -614,7 +614,7 @@ function saveAisMappings() {
 .vessel-message {
   margin-bottom: 10px;
   padding: 9px 11px;
-  font-size: 10px;
+  font-size: 11px;
   border-radius: 9px;
 }
 
@@ -659,7 +659,7 @@ function saveAisMappings() {
 .vessel-table th {
   padding: 7px 9px;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 11px;
   text-align: left;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -668,7 +668,7 @@ function saveAisMappings() {
 .vessel-table td {
   padding: 9px;
   color: var(--li-text-soft, #344861);
-  font-size: 10px;
+  font-size: 11px;
   vertical-align: middle;
   background: rgba(255, 255, 255, 0.73);
   border-top: 1px solid var(--li-border, rgba(16, 42, 67, 0.11));
@@ -695,7 +695,7 @@ function saveAisMappings() {
   margin-top: 3px;
   overflow: hidden;
   color: var(--li-text-faint, #8a98aa);
-  font-size: 8px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -703,7 +703,7 @@ function saveAisMappings() {
 .vessel-status {
   display: inline-flex;
   padding: 3px 6px;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   border-radius: 999px;
 }
@@ -738,7 +738,7 @@ function saveAisMappings() {
 .row-actions button {
   min-height: 29px;
   padding: 0 8px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 760;
   border-radius: 8px;
   cursor: pointer;
