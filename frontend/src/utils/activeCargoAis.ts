@@ -2,6 +2,7 @@ import type {
   AisMapItem,
   TransportRecord,
 } from '@/types/dashboard'
+import { canonicalVesselName } from '@/services/vesselMmsi'
 
 export interface ActiveCargoAisOptions {
   /**
@@ -615,7 +616,8 @@ function matchActiveTransports(
     }
   }
 
-  const vesselName = exactVesselName(
+  // AIS 측 선박명 lookup은 canonical(항차 토큰 제거) 키로 맞춘다.
+  const vesselName = canonicalVesselName(
     item.vessel_name,
   )
 
@@ -713,9 +715,11 @@ export function buildActiveCargoAisView(
       )
     }
 
+    // transports 측 인덱스도 canonical(항차 토큰 제거) 키로 적재한다.
+    // 표시용 transport.vessel_name 원문은 변경하지 않는다.
     appendIndex(
       byVessel,
-      exactVesselName(
+      canonicalVesselName(
         transport.vessel_name,
       ),
       transport,
@@ -839,7 +843,8 @@ export function findActiveCargoAisForTransport(
   const trprNo = text(
     transport.trpr_no,
   )
-  const vesselName = exactVesselName(
+  // 매칭 경로이므로 canonical(항차 토큰 제거) 키로 비교한다.
+  const vesselName = canonicalVesselName(
     transport.vessel_name,
   )
 
@@ -869,7 +874,7 @@ export function findActiveCargoAisForTransport(
   if (vesselName) {
     return items.find(
       (item) =>
-        exactVesselName(
+        canonicalVesselName(
           item.vessel_name,
         ) === vesselName,
     )

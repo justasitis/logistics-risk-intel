@@ -5,6 +5,7 @@ import type {
   GeoJsonFeatureCollection,
   TransportRecord,
 } from '@/types/dashboard'
+import { canonicalVesselName } from '@/services/vesselMmsi'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const MAX_ITEMS = 5000
@@ -53,7 +54,9 @@ function normalizedIdentifier(value: unknown): string {
 }
 
 function normalizedVesselName(value: unknown): string {
-  return text(value)
+  // 매칭 전용 키: canonical(끝의 항차 토큰 제거) 후
+  // 대문자·영숫자만 남긴다. 표시용 원문은 변경하지 않는다.
+  return canonicalVesselName(value)
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
 }

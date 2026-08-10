@@ -2,6 +2,7 @@ import type {
   AisMapItem,
   TransportRecord,
 } from '@/types/dashboard'
+import { canonicalVesselName } from '@/services/vesselMmsi'
 
 export type AisLinkedMapItem = AisMapItem & {
   matched_hbl_no?: string | null
@@ -19,10 +20,10 @@ function identifier(value: unknown): string {
     .replace(/\s+/g, '')
 }
 
-function exactVesselName(value: unknown): string {
-  // IF 원문 정책: 앞뒤 공백만 제거한다.
-  // 대소문자, 기호, M/V, 내부 공백은 변경하지 않는다.
-  return text(value)
+function matchVesselName(value: unknown): string {
+  // 매칭 전용 키: canonical(끝의 항차 토큰 제거)을 사용한다.
+  // 표시용 vessel_name 원문은 변경하지 않는다.
+  return canonicalVesselName(value)
 }
 
 function splitIdentifiers(value: unknown): string[] {
@@ -145,7 +146,7 @@ export function ensureAisTransportLinks(
 
     addCandidate(
       byVessel,
-      exactVesselName(
+      matchVesselName(
         transport.vessel_name,
       ),
       transport,
@@ -216,7 +217,7 @@ export function ensureAisTransportLinks(
       }
 
       if (!match) {
-        const vesselName = exactVesselName(
+        const vesselName = matchVesselName(
           item.vessel_name,
         )
 

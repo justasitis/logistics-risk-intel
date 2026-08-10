@@ -20,7 +20,7 @@ function loadMappings(): VesselMmsiMapping[] {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
 
-    return parsed.filter(
+    const normalized = parsed.filter(
       (value): value is VesselMmsiMapping => (
         Boolean(value)
         && typeof value === 'object'
@@ -32,13 +32,21 @@ function loadMappings(): VesselMmsiMapping[] {
         ).mmsi_no === 'string'
       ),
     ).map((mapping) => {
-      const exactName = normalizeVesselName(mapping.vessel_name)
+      const canonicalName = normalizeVesselName(mapping.vessel_name)
       return {
         ...mapping,
-        vessel_name: exactName,
-        normalized_vessel_name: exactName,
+        vessel_name: canonicalName,
+        normalized_vessel_name: canonicalName,
       }
     })
+
+    // 과거 "선박명+항차"로 저장된 엔트리는 로드 시 같은 canonical
+    // 키로 정규화되므로, 여기서 하나로 병합한다 (뒤쪽 엔트리 우선).
+    const merged = new Map<string, VesselMmsiMapping>()
+    for (const mapping of normalized) {
+      merged.set(mapping.vessel_name, mapping)
+    }
+    return [...merged.values()]
   } catch {
     return []
   }

@@ -3,6 +3,7 @@ import type {
   AisUploadResult,
 } from '@/types/dashboard'
 import type { VesselMmsiMapping } from '@/types/vesselMmsi'
+import { canonicalVesselName } from '@/services/vesselMmsi'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -117,10 +118,6 @@ export async function fetchMarinesiaLatest(
   )
 }
 
-function exactName(value: unknown): string {
-  return String(value ?? '').trim()
-}
-
 function mmsi(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '')
 }
@@ -146,7 +143,7 @@ export function selectMarinesiaByMmsiMaster(
 ): MarinesiaSelectionResult {
   const mappingByName = new Map(
     mappings.map((mapping) => [
-      exactName(mapping.vessel_name),
+      canonicalVesselName(mapping.vessel_name),
       mmsi(mapping.mmsi_no),
     ]),
   )
@@ -154,7 +151,9 @@ export function selectMarinesiaByMmsiMaster(
   const groups = new Map<string, MarinesiaAisItem[]>()
 
   for (const item of sourceItems) {
-    const key = `${item.company}|${exactName(item.vessel_name)}`
+    // 신 AIS 포맷에는 company가 없다 — canonical 선박명(항차 토큰
+    // 제거)만으로 묶는다. 표시용 vessel_name 원문은 유지.
+    const key = canonicalVesselName(item.vessel_name)
     const values = groups.get(key) ?? []
     values.push(item)
     groups.set(key, values)
@@ -170,7 +169,7 @@ export function selectMarinesiaByMmsiMaster(
     const sample = values[0]
     if (!sample) continue
 
-    const vesselName = exactName(sample.vessel_name)
+    const vesselName = canonicalVesselName(sample.vessel_name)
     const mappedMmsi = mappingByName.get(vesselName)
 
     if (mappedMmsi) {

@@ -36,12 +36,30 @@ function text(value: unknown): string {
   return String(value).trim()
 }
 
+// 끝의 항차 토큰(공백 + 숫자 3~5자리 + 대문자 1~2자) 패턴.
+// 예: "PACIFIC SINGAPORE 2639W"의 " 2639W". 대문자 기준으로만
+// 매칭하는 보수적 규칙 — 패턴에 맞지 않으면 제거하지 않아
+// 실제 선박명 오손을 막는다. 백엔드 api_server.py의
+// VOYAGE_TOKEN_RE와 동일 규칙.
+const VOYAGE_TOKEN_PATTERN = /\s+\d{3,5}[A-Z]{1,2}$/
+
 /**
- * Legacy function name retained to avoid breaking imports.
- * It no longer normalizes. It only trims leading/trailing whitespace.
+ * 정규 표준명(canonical): 앞뒤 공백 제거 + 끝의 항차 토큰 제거.
+ * 매칭·집계·MMSI 마스터 키 경로에서만 사용하고,
+ * 화면 표시용 vessel_name 원문은 변경하지 않는다.
+ */
+export function canonicalVesselName(value: unknown): string {
+  return text(value).replace(VOYAGE_TOKEN_PATTERN, '')
+}
+
+/**
+ * MMSI 마스터 키 정규화 — canonicalVesselName과 동일 동작.
+ * 기존 저장된 매핑 로드(loadMappings) 시에도 같은 정규화가
+ * 적용되므로, 과거 "선박명+항차"로 저장된 엔트리는 canonical
+ * 키로 정규화되어 하나로 병합된다.
  */
 export function normalizeVesselName(value: unknown): string {
-  return text(value)
+  return canonicalVesselName(value)
 }
 
 export function isUsableVesselName(value: unknown): boolean {
@@ -107,10 +125,11 @@ export function createVesselMapping(
   source: VesselMmsiSource,
   notes = '',
 ): VesselMmsiMapping {
-  const exactVesselName = text(vesselName)
+  // 마스터 키는 canonical(항차 토큰 제거) 기준으로 저장한다.
+  const canonicalName = canonicalVesselName(vesselName)
   const normalizedMmsi = normalizeMmsi(mmsiNo)
 
-  if (!isUsableVesselName(exactVesselName)) {
+  if (!isUsableVesselName(canonicalName)) {
     throw new Error('유효한 선박명이 아닙니다.')
   }
 
@@ -119,8 +138,8 @@ export function createVesselMapping(
   }
 
   return {
-    vessel_name: exactVesselName,
-    normalized_vessel_name: exactVesselName,
+    vessel_name: canonicalName,
+    normalized_vessel_name: canonicalName,
     mmsi_no: normalizedMmsi,
     source,
     notes: text(notes),
@@ -134,7 +153,8 @@ function mappingIndex(
   const result = new Map<string, VesselMmsiMapping>()
 
   for (const mapping of mappings) {
-    const key = text(mapping.vessel_name)
+    // 마스터 키는 canonical — 과거 "선박명+항차" 엔트리도 병합된다.
+    const key = canonicalVesselName(mapping.vessel_name)
     if (!key || !isValidMmsi(mapping.mmsi_no)) continue
 
     result.set(key, {
@@ -154,7 +174,8 @@ function aisMmsiIndex(
   const result = new Map<string, string>()
 
   for (const item of items) {
-    const key = text(item.vessel_name)
+    // AIS 측 이름도 canonical 키로 맞춘다 (항차 토큰 제거).
+    const key = canonicalVesselName(item.vessel_name)
     const mmsi = normalizeMmsi(item.mmsi_no)
 
     if (!isUsableVesselName(key) || !isValidMmsi(mmsi)) {

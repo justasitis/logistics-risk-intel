@@ -133,6 +133,43 @@ class TestVesselInventory:
         body = client.get("/api/vessels/inventory").json()
         assert body["vessels"][0]["vessel_name"] == "VSL TRIM"
 
+    def test_voyage_tokens_merged_into_one_vessel(self, monkeypatch):
+        # 같은 선박의 서로 다른 항차 토큰은 한 행으로 합산한다.
+        info_df = _info_df([
+            _row("T001", "PACIFIC SINGAPORE 2639W"),
+            _row("T002", "PACIFIC SINGAPORE 2640W"),
+            _row("T003", "PACIFIC SINGAPORE"),
+        ])
+        client = _client(monkeypatch, info_df)
+
+        body = client.get("/api/vessels/inventory").json()
+        assert [v["vessel_name"] for v in body["vessels"]] == [
+            "PACIFIC SINGAPORE",
+        ]
+        vessel = body["vessels"][0]
+        assert vessel["shipment_count"] == 3
+        assert vessel["trpr_nos"] == ["T001", "T002", "T003"]
+
+    def test_non_voyage_names_not_stripped(self, monkeypatch):
+        # 항차 패턴(공백+숫자3~5+대문자1~2)이 아니면 이름을 그대로 둔다.
+        info_df = _info_df([
+            _row("T001", "CMA CGM LIBERTY"),
+            _row("T002", "SEASPAN 12345"),     # 끝이 숫자만 — 항차 아님
+            _row("T003", "VSL 42W"),           # 숫자 2자리 — 항차 아님
+            _row("T004", "VSL 123456W"),       # 숫자 6자리 — 항차 아님
+            _row("T005", "VSL 2639w"),         # 소문자 접미 — 항차 아님
+        ])
+        client = _client(monkeypatch, info_df)
+
+        body = client.get("/api/vessels/inventory").json()
+        assert sorted(v["vessel_name"] for v in body["vessels"]) == [
+            "CMA CGM LIBERTY",
+            "SEASPAN 12345",
+            "VSL 123456W",
+            "VSL 2639w",
+            "VSL 42W",
+        ]
+
     def test_empty_result(self, monkeypatch):
         client = _client(monkeypatch, pd.DataFrame())
 

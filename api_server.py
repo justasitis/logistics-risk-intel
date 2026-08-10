@@ -869,13 +869,30 @@ def _is_usable_vessel_name(value: Any) -> bool:
     return len(name) >= 2 and name.upper() not in VESSEL_NAME_PLACEHOLDERS
 
 
+# 끝의 항차 토큰(공백 + 숫자 3~5자리 + 대문자 1~2자) 패턴.
+# 예: "PACIFIC SINGAPORE 2639W"의 " 2639W". 대문자 기준 보수적 규칙 —
+# 패턴에 맞지 않으면 제거하지 않아 실제 선박명 오손을 막는다.
+# 프런트 services/vesselMmsi.ts의 VOYAGE_TOKEN_PATTERN과 동일 규칙.
+VOYAGE_TOKEN_RE = re.compile(r"\s+\d{3,5}[A-Z]{1,2}$")
+
+
+def _canonical_vessel_name(value: Any) -> str:
+    """정규 표준명(canonical): 앞뒤 공백 제거 + 끝의 항차 토큰 제거.
+
+    매칭·집계·마스터 키 경로 전용 — 표시용 원문은 변경하지 않는다.
+    """
+    return VOYAGE_TOKEN_RE.sub("", str(value or "").strip())
+
+
 def _build_vessel_inventory(snapshot_df: pd.DataFrame) -> list[dict[str, Any]]:
-    """활성 운송 Snapshot을 선박명(IF 원문, trim) 기준으로 집계한다."""
+    """활성 운송 Snapshot을 canonical 선박명(공백·항차 토큰 제거) 기준으로 집계한다."""
     if snapshot_df.empty or "vessel_name" not in snapshot_df.columns:
         return []
 
     work = snapshot_df.copy()
-    work["_vessel"] = work["vessel_name"].fillna("").astype(str).str.strip()
+    work["_vessel"] = work["vessel_name"].fillna("").map(
+        _canonical_vessel_name,
+    )
     work = work[work["_vessel"].map(_is_usable_vessel_name)]
 
     vessels: list[dict[str, Any]] = []
