@@ -126,7 +126,7 @@ const visibleZones = computed(() => zoneCircles.value.filter((z) => z.inView))
 const LABEL_DIRS: Array<[number, number]> = [
   [1, 0], [1, -0.8], [1, 0.8], [-1, 0], [-1, -0.8], [-1, 0.8], [0, -1], [0, 1],
 ]
-const LABEL_GAPS = [8, 18, 32, 50, 72, 100]
+const LABEL_GAPS = [8, 16, 26, 40, 58, 80, 108, 140]
 const POPUP_H = 38
 
 /** 라벨 문구 — Actify 간결 문구 우선, 없으면 headline 앞부분 폭 */
@@ -137,11 +137,21 @@ function labelText(zone: RegistryMapZone | undefined): string {
   return headline.length > 22 ? `${headline.slice(0, 22)}…` : headline
 }
 
-/** 텍스트 폭 근사 (한글 11.5px, 그 외 6.6px) + 좌우 패딩·닫기 버튼 영역 */
+/**
+ * 텍스트 폭 근사 (11px 기준: 한글 11.5, 대문자 7.6, 숫자 6.4, 공백 3.4, 그 외 6.6)
+ * + 좌우 패딩·닫기 버튼 영역·여유분. 이전의 단일 6.6px 추정은 공백/대문자 비율에 따라
+ * 실제 렌더 폭과 양방향으로 어긋나 박스 겹침/여백 과대를 유발했음.
+ */
 function estimateWidth(text: string): number {
   let w = 0
-  for (const ch of text) w += /[가-힣]/.test(ch) ? 11.5 : 6.6
-  return Math.ceil(w) + 30
+  for (const ch of text) {
+    if (/[가-힣]/.test(ch)) w += 11.5
+    else if (/[A-Z]/.test(ch)) w += 7.6
+    else if (/[0-9]/.test(ch)) w += 6.4
+    else if (ch === ' ') w += 3.4
+    else w += 6.6
+  }
+  return Math.ceil(w) + 36
 }
 
 interface LabelRect {
@@ -160,6 +170,50 @@ function rectsOverlap(a: LabelRect, b: LabelRect, pad: number): boolean {
   )
 }
 
+/** 두 사각형의 기하학적 겹침 면적 (0이면 비겹침) */
+function overlapArea(a: LabelRect, b: LabelRect): number {
+  const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+  const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+  return ox > 0 && oy > 0 ? ox * oy : 0
+}
+
+/**
+ * 앵커 주변 후보 위치 생성 (간격 → 방향 → 미세 시프트 순, 경계 클램프 포함).
+ * 옆 배치(dx≠0)는 상하로 한 박스 높이만큼 밀어 보고, 위/아래 배치(dy≠0)는 좌우로 밀어
+ * 같은 간격·방향에서 겹침 회피 기회를 늘린다.
+ */
+function candidatesFor(circle: ZoneCircle, w: number): LabelRect[] {
+  const out: LabelRect[] = []
+  for (const gap of LABEL_GAPS) {
+    for (const [dx, dy] of LABEL_DIRS) {
+      const bx = dx > 0
+        ? circle.cx + circle.r + gap
+        : dx < 0
+          ? circle.cx - circle.r - gap - w
+          : circle.cx - w / 2
+      const by = dy < 0
+        ? circle.cy - circle.r - gap - POPUP_H
+        : dy > 0
+          ? circle.cy + circle.r + gap
+          : circle.cy - POPUP_H / 2
+      const shifts: Array<[number, number]> = dx !== 0
+        ? [[0, 0], [0, -(POPUP_H + 6)], [0, POPUP_H + 6]]
+        : dy !== 0
+          ? [[0, 0], [-24, 0], [24, 0]]
+          : [[0, 0]]
+      for (const [sx, sy] of shifts) {
+        out.push({
+          x: Math.max(4, Math.min(W - 4 - w, bx + sx)),
+          y: Math.max(4, Math.min(H - 4 - POPUP_H, by + sy)),
+          w,
+          h: POPUP_H,
+        })
+      }
+    }
+  }
+  return out
+}
+
 const openPopups = ref<string[]>([])
 
 function togglePopup(key: string): void {
@@ -176,14 +230,79 @@ function closeAllPopups(): void {
   openPopups.value = []
 }
 
+// ---------- 팝업 드래그 이동 (포인터 캡처 기반, 권역/데이터 변경 시 리셋) ----------
+interface DragState {
+  key: string
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  baseX: number
+  baseY: number
+}
+
+/** 팝업 키 → 드래그로 이동된 좌표 (SVG viewBox 좌표계) */
+const dragOffsets = ref<Map<string, { x: number; y: number }>>(new Map())
+const dragState = ref<DragState | null>(null)
+const svgRef = ref<SVGSVGElement | null>(null)
+
+/** 화면 px → SVG viewBox 단위 환산 비율 (SVG가 width:100%로 스케일됨) */
+function svgScale(): number {
+  const el = svgRef.value
+  if (!el) return 1
+  const rectW = el.getBoundingClientRect().width
+  return rectW > 0 ? rectW / W : 1
+}
+
+function onPopupPointerDown(box: PopupBox, e: PointerEvent): void {
+  if (e.button !== 0) return
+  e.preventDefault()
+  ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+  dragState.value = {
+    key: box.key,
+    pointerId: e.pointerId,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+    baseX: box.x,
+    baseY: box.y,
+  }
+}
+
+function onPopupPointerMove(box: PopupBox, e: PointerEvent): void {
+  const st = dragState.value
+  if (!st || st.key !== box.key || st.pointerId !== e.pointerId) return
+  const scale = svgScale()
+  const dx = (e.clientX - st.startClientX) / scale
+  const dy = (e.clientY - st.startClientY) / scale
+  const nx = Math.max(4, Math.min(W - 4 - box.w, st.baseX + dx))
+  const ny = Math.max(4, Math.min(H - 4 - box.h, st.baseY + dy))
+  const next = new Map(dragOffsets.value)
+  next.set(box.key, { x: nx, y: ny })
+  dragOffsets.value = next
+}
+
+function onPopupPointerUp(box: PopupBox, e: PointerEvent): void {
+  const st = dragState.value
+  if (!st || st.key !== box.key || st.pointerId !== e.pointerId) return
+  dragState.value = null
+}
+
 // 권역 전환(및 최초 표시) 시 팝업 상태를 리셋하고 해당 권역의 모든 이벤트 팝업을 기본 표시
-// 배치는 popupBoxes의 기존 겹침 방지 로직(LABEL_DIRS/LABEL_GAPS)을 그대로 사용
+// 드래그로 옮긴 위치도 함께 리셋해 기본 배치로 복귀
 watch(
   activeRegion,
   () => {
+    dragOffsets.value = new Map()
     openPopups.value = visibleZones.value.map((z) => z.key)
   },
   { immediate: true },
+)
+
+// 레지스트리 데이터 변경 시 드래그 위치만 리셋 (기본 배치 복귀)
+watch(
+  () => props.zones,
+  () => {
+    dragOffsets.value = new Map()
+  },
 )
 
 interface PopupBox extends LabelRect {
@@ -207,35 +326,27 @@ const popupBoxes = computed<PopupBox[]>(() => {
     const title = labelText(zone)
     const sub = `${circle.name} · ${circle.severity} · ${circle.active ? '진행 중' : '완화'}`
     const w = Math.max(estimateWidth(title), estimateWidth(sub))
-    // 이미 열린 팝업과 겹치지 않는 첫 자리 탐색, 없으면 첫 후보에 배치
+    // 이미 열린 팝업과 겹치지 않는 첫 자리 탐색, 모두 겹치면 겹침 면적이 가장 작은 자리에 배치
     let chosen: LabelRect | null = null
-    let fallback: LabelRect | null = null
-    outer:
-    for (const gap of LABEL_GAPS) {
-      for (const [dx, dy] of LABEL_DIRS) {
-        let bx = dx > 0
-          ? circle.cx + circle.r + gap
-          : dx < 0
-            ? circle.cx - circle.r - gap - w
-            : circle.cx - w / 2
-        let by = dy < 0
-          ? circle.cy - circle.r - gap - POPUP_H
-          : dy > 0
-            ? circle.cy + circle.r + gap
-            : circle.cy - POPUP_H / 2
-        bx = Math.max(4, Math.min(W - 4 - w, bx))
-        by = Math.max(4, Math.min(H - 4 - POPUP_H, by))
-        const rect = { x: bx, y: by, w, h: POPUP_H }
-        if (!fallback) fallback = rect
-        if (!placed.some((p) => rectsOverlap(p, rect, 3))) {
-          chosen = rect
-          break outer
-        }
+    let best: LabelRect | null = null
+    let bestArea = Number.POSITIVE_INFINITY
+    for (const rect of candidatesFor(circle, w)) {
+      const area = placed.reduce((sum, p) => sum + overlapArea(p, rect), 0)
+      if (area === 0 && !placed.some((p) => rectsOverlap(p, rect, 3))) {
+        chosen = rect
+        break
+      }
+      if (area < bestArea) {
+        bestArea = area
+        best = rect
       }
     }
-    const rect = chosen ?? fallback
+    const rect = chosen ?? best
     if (!rect) continue
-    placed.push(rect)
+    // 드래그로 옮긴 위치가 있으면 우선 적용하고, 이후 자동 배치는 그 위치를 피함
+    const off = dragOffsets.value.get(key)
+    const finalRect: LabelRect = off ? { x: off.x, y: off.y, w: rect.w, h: rect.h } : rect
+    placed.push(finalRect)
     out.push({
       key,
       title,
@@ -243,7 +354,7 @@ const popupBoxes = computed<PopupBox[]>(() => {
       color: circle.color,
       anchorX: circle.cx,
       anchorY: circle.cy,
-      ...rect,
+      ...finalRect,
     })
   }
   return out
@@ -293,7 +404,7 @@ defineExpose({ getSvgHtml })
     </p>
 
     <div ref="mapRef" class="map-frame">
-      <svg :viewBox="`0 0 ${W} ${H}`" class="map-svg" role="img" :aria-label="`물류 이벤트 지도 — ${region.label}`">
+      <svg ref="svgRef" :viewBox="`0 0 ${W} ${H}`" class="map-svg" role="img" :aria-label="`물류 이벤트 지도 — ${region.label}`">
         <defs>
           <clipPath id="report-map-clip">
             <rect x="0" y="0" :width="W" :height="H" rx="12" />
@@ -338,7 +449,16 @@ defineExpose({ getSvgHtml })
             <circle :cx="z.cx" :cy="z.cy" r="3.5" :fill="z.color" stroke="#fff" stroke-width="1.4" />
           </g>
 
-          <g v-for="b in popupBoxes" :key="`popup-${b.key}`">
+          <g
+            v-for="b in popupBoxes"
+            :key="`popup-${b.key}`"
+            class="popup"
+            :class="{ dragging: dragState?.key === b.key }"
+            @pointerdown="onPopupPointerDown(b, $event)"
+            @pointermove="onPopupPointerMove(b, $event)"
+            @pointerup="onPopupPointerUp(b, $event)"
+            @pointercancel="onPopupPointerUp(b, $event)"
+          >
             <line
               :x1="b.anchorX"
               :y1="b.anchorY"
@@ -356,7 +476,7 @@ defineExpose({ getSvgHtml })
               {{ b.title }}
             </text>
             <text :x="b.x + 9" :y="b.y + 29" class="popup-sub">{{ b.sub }}</text>
-            <g class="popup-close" @click.stop="closePopup(b.key)">
+            <g class="popup-close" @pointerdown.stop @click.stop="closePopup(b.key)">
               <rect :x="b.x + b.w - 19" :y="b.y + 5" width="14" height="14" rx="4" class="popup-close-bg" />
               <text :x="b.x + b.w - 12" :y="b.y + 15.5" class="popup-close-x">×</text>
             </g>
@@ -375,7 +495,7 @@ defineExpose({ getSvgHtml })
           <span class="legend-dot solid-demo"></span>
           진행 중(실선) / 완화·해소(점선)
         </span>
-        <span class="legend-item">팝업 기본 표시 · 동그라미 클릭으로 열기/닫기</span>
+        <span class="legend-item">팝업 기본 표시 · 동그라미 클릭으로 열기/닫기 · 팝업 드래그로 이동 가능</span>
       </div>
       <div class="footer-right">
         <span class="region-note">{{ region.label }} 기준 · 이벤트 {{ visibleZones.length }}개 영향권</span>
@@ -479,6 +599,18 @@ defineExpose({ getSvgHtml })
   fill: rgba(255, 255, 255, 0.95);
   stroke-width: 1.2;
 }
+.popup {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.popup.dragging {
+  cursor: grabbing;
+}
+/* 텍스트 위에서도 박스 드래그가 시작되도록 텍스트는 포인터 이벤트 제외 */
+.popup text {
+  pointer-events: none;
+}
 .popup-title {
   font-size: 11px;
   font-weight: 700;
@@ -491,6 +623,7 @@ defineExpose({ getSvgHtml })
   stroke-width: 1;
   stroke-dasharray: 2 2;
   opacity: 0.7;
+  pointer-events: none;
 }
 .popup-close {
   cursor: pointer;
