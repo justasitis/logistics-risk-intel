@@ -1,6 +1,5 @@
 import type {
   AisMapItem,
-  TransportRecord,
 } from '@/types/dashboard'
 
 export type VesselMmsiSource =
@@ -27,6 +26,25 @@ export interface VesselMmsiMapping {
   updated_at: string
 }
 
+/**
+ * GET /api/vessels/inventory 응답의 vessels[] 1행.
+ * 법인 구분 없이 선박명(IF 원문, trim) 기준으로 집계된 값이다.
+ */
+export interface VesselInventoryApiRow {
+  vessel_name: string
+  shipment_count: number
+  trpr_nos: string[]
+  lanes: string[]
+  latest_eta: string | null
+}
+
+export interface VesselInventoryApiResponse {
+  vessels: VesselInventoryApiRow[]
+  transport_count: number
+  generated_at: string
+  cache_hit?: boolean
+}
+
 export interface VesselUsageRow {
   vessel_name: string
   /**
@@ -34,11 +52,8 @@ export interface VesselUsageRow {
    */
   normalized_vessel_name: string
   shipment_count: number
-  transport_keys: string[]
   trpr_nos: string[]
-  companies: string[]
   lanes: string[]
-  earliest_etd: string | null
   latest_eta: string | null
   mapped_mmsi_no: string | null
   mapping_source: VesselMmsiSource | null
@@ -47,7 +62,6 @@ export interface VesselUsageRow {
 
 export interface VesselInventorySummary {
   transport_count: number
-  valid_vessel_transport_count: number
   unique_vessel_count: number
   mapped_vessel_count: number
   ais_detected_count: number
@@ -61,7 +75,8 @@ export interface VesselInventoryResult {
 }
 
 export interface VesselInventoryInput {
-  transports: TransportRecord[]
+  vessels: VesselInventoryApiRow[]
+  transportCount: number
   mappings: VesselMmsiMapping[]
   aisItems?: AisMapItem[]
 }

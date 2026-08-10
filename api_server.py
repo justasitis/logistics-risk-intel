@@ -845,6 +845,117 @@ def schedule_timeline(
 
         ) from exc
 
+
+# ---------- 선박 MMSI 인벤토리 ----------
+# '선박 MMSI 관리' 탭 전용. 대시보드 조회(법인 필터)와 무관하게
+# 법인 구분 없이 최근 1년 활성 운송의 선박명을 집계한다.
+VESSEL_INVENTORY_ETD_DAYS = 365
+VESSEL_INVENTORY_MAX_ROWS = 20_000
+VESSEL_INVENTORY_SELECT_COLUMNS = [
+    "cmpy_cd", "plnt_cd", "trpr_no", "vessel_nm",
+    "dprt", "dprt_nm", "arvl", "arvl_nm",
+    "eta", "eta_date", "ata", "dlvy_ata", "cmpl_yn",
+]
+# 프런트 services/vesselMmsi.ts의 INVALID_VESSEL_NAMES와 동일 기준.
+VESSEL_NAME_PLACEHOLDERS = frozenset({
+    "", "-", "NA", "N/A", "NONE", "NULL", "UNKNOWN", "UNKNOWN VESSEL",
+    "TBA", "TBD", "TBN", "TO BE ANNOUNCED", "TO BE NAMED",
+    "미정", "선박미정", "선명미정",
+})
+
+
+def _is_usable_vessel_name(value: Any) -> bool:
+    name = str(value or "").strip()
+    return len(name) >= 2 and name.upper() not in VESSEL_NAME_PLACEHOLDERS
+
+
+def _build_vessel_inventory(snapshot_df: pd.DataFrame) -> list[dict[str, Any]]:
+    """활성 운송 Snapshot을 선박명(IF 원문, trim) 기준으로 집계한다."""
+    if snapshot_df.empty or "vessel_name" not in snapshot_df.columns:
+        return []
+
+    work = snapshot_df.copy()
+    work["_vessel"] = work["vessel_name"].fillna("").astype(str).str.strip()
+    work = work[work["_vessel"].map(_is_usable_vessel_name)]
+
+    vessels: list[dict[str, Any]] = []
+    for vessel_name, group in work.groupby("_vessel", sort=False):
+        # 법인 구분 없이 묶으므로 같은 trpr_no가 여러 법인 행으로
+        # 나뉘어 있을 수 있다 — 운송 수는 유니크 trpr_no 기준.
+        trpr_nos = sorted({
+            str(value).strip()
+            for value in group["trpr_no"].dropna()
+            if str(value).strip()
+        })
+        lanes: set[str] = set()
+        for row in group.to_dict(orient="records"):
+            pol = str(row.get("pol_name") or row.get("pol") or "").strip()
+            pod = str(row.get("pod_name") or row.get("pod") or "").strip()
+            if not pol and not pod:
+                continue
+            lanes.add(f"{pol or '?'}–{pod or '?'}")
+        eta_values = pd.to_datetime(
+            group["current_eta"], errors="coerce",
+        ).dropna()
+        vessels.append({
+            "vessel_name": str(vessel_name),
+            "shipment_count": len(trpr_nos),
+            "trpr_nos": trpr_nos[:5],
+            "lanes": sorted(lanes),
+            "latest_eta": (
+                eta_values.max().isoformat() if not eta_values.empty else None
+            ),
+        })
+
+    vessels.sort(
+        key=lambda item: (-item["shipment_count"], item["vessel_name"]),
+    )
+    return vessels
+
+
+@app.get("/api/vessels/inventory")
+def vessel_inventory(
+    refresh: bool = Query(default=False),
+) -> dict[str, Any]:
+    """선박 MMSI 관리 탭 전용 선박 인벤토리 (법인 구분 없음)."""
+    key = "vessels|inventory"
+    if not refresh and key in _CACHE:
+        cached_at, payload = _CACHE[key]
+        if time.time() - cached_at <= CACHE_TTL_SECONDS:
+            return {**payload, "cache_hit": True}
+
+    try:
+        info_df = fetch_bl_info(
+            etd_from=(
+                date.today() - timedelta(days=VESSEL_INVENTORY_ETD_DAYS)
+            ),
+            select_columns=VESSEL_INVENTORY_SELECT_COLUMNS,
+            max_rows=VESSEL_INVENTORY_MAX_ROWS,
+        )
+        snapshot_df = build_transport_snapshot(info_df, active_only=True)
+        payload = _clean_value({
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "cache_hit": False,
+            "transport_count": int(len(snapshot_df)),
+            "vessels": _build_vessel_inventory(snapshot_df),
+        })
+        _CACHE[key] = (time.time(), payload)
+        return payload
+    except RuntimeError as exc:
+        # 데이터레이크 남부(서버 안쪽) 예외 문자열은 응답에 노출하지 않고 로그만 남긴다.
+        logger.exception("선박 인벤토리 데이터레이크 조회 실패")
+        raise HTTPException(
+            status_code=502,
+            detail="데이터레이크 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("선박 인벤토리 집계 실패")
+        raise HTTPException(
+            status_code=500,
+            detail="선박 인벤토리 집계에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
+
+
 @app.get("/api/report/leadtime")
 def leadtime_report(
     months: int = Query(default=12, ge=3, le=36),

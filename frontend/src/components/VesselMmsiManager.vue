@@ -10,6 +10,7 @@ import { useVesselMmsiMaster } from '@/composables/useVesselMmsiMaster'
 import {
   buildVesselInventory,
   downloadTextFile,
+  fetchVesselInventory,
   isValidMmsi,
   mappingsFromAisItems,
   mappingsToJson,
@@ -19,15 +20,14 @@ import {
 } from '@/services/vesselMmsi'
 import type {
   AisMapItem,
-  TransportRecord,
 } from '@/types/dashboard'
 import type {
+  VesselInventoryApiResponse,
   VesselMmsiStatus,
   VesselUsageRow,
 } from '@/types/vesselMmsi'
 
 const props = defineProps<{
-  transports: TransportRecord[]
   aisItems: AisMapItem[]
 }>()
 
@@ -48,9 +48,14 @@ const message = ref('')
 const errorMessage = ref('')
 const draftMmsi = reactive<Record<string, string>>({})
 
+// 대시보드 조회와 무관하게 전용 API를 명시 조회한다 (자동 조회 금지).
+const inventoryData = ref<VesselInventoryApiResponse | null>(null)
+const inventoryLoading = ref(false)
+
 const inventory = computed(() =>
   buildVesselInventory({
-    transports: props.transports,
+    vessels: inventoryData.value?.vessels ?? [],
+    transportCount: inventoryData.value?.transport_count ?? 0,
     mappings: mappings.value,
     aisItems: props.aisItems,
   }),
@@ -71,9 +76,7 @@ const filteredRows = computed(() => {
 
     return [
       row.vessel_name,
-      row.vessel_name,
       row.mapped_mmsi_no ?? '',
-      row.companies.join(' '),
       row.lanes.join(' '),
       row.trpr_nos.join(' '),
     ].some(
@@ -112,6 +115,19 @@ function formatDate(value: string | null): string {
   }).format(date)
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
 function statusLabel(status: VesselMmsiStatus): string {
   if (status === 'MAPPED') return '등록'
   if (status === 'AIS_DETECTED') return 'AIS 감지'
@@ -121,6 +137,26 @@ function statusLabel(status: VesselMmsiStatus): string {
 function clearFeedback() {
   message.value = ''
   errorMessage.value = ''
+}
+
+async function loadInventory() {
+  clearFeedback()
+  inventoryLoading.value = true
+
+  try {
+    inventoryData.value = await fetchVesselInventory(
+      inventoryData.value !== null,
+    )
+    message.value = (
+      `선박 ${inventory.value.summary.unique_vessel_count}척을 조회했습니다.`
+    )
+  } catch (error) {
+    errorMessage.value = error instanceof Error
+      ? error.message
+      : '선박 목록을 조회하지 못했습니다.'
+  } finally {
+    inventoryLoading.value = false
+  }
 }
 
 function saveRow(row: VesselUsageRow) {
@@ -240,8 +276,8 @@ function saveAisMappings() {
         <p class="eyebrow">VESSEL MASTER</p>
         <h2>운송 중 선박 MMSI 관리</h2>
         <p>
-          데이터레이크 IF 선박명을 원문 그대로 집계하고
-          MMSI가 없는 선박을 추출합니다.
+          법인 구분 없이 최근 1년 활성 운송의 IF 선박명을 원문 그대로
+          집계하고 MMSI가 없는 선박을 추출합니다.
         </p>
       </div>
 
@@ -249,7 +285,19 @@ function saveAisMappings() {
         <button
           type="button"
           class="btn btn--primary"
-          :disabled="missingRows.length === 0"
+          :disabled="inventoryLoading"
+          @click="loadInventory"
+        >
+          {{ inventoryLoading
+            ? '조회 중...'
+            : inventoryData
+              ? '선박 목록 다시 조회'
+              : '선박 목록 조회' }}
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :disabled="!inventoryData || missingRows.length === 0"
           @click="downloadMissingCsv"
         >
           미등록 CSV
@@ -257,6 +305,7 @@ function saveAisMappings() {
         <button
           type="button"
           class="btn"
+          :disabled="!inventoryData"
           @click="downloadAllCsv"
         >
           전체 CSV
@@ -300,7 +349,9 @@ function saveAisMappings() {
         <div class="metric-card__value">
           {{ inventory.summary.transport_count }}
         </div>
-        <div class="metric-card__hint">현재 Dashboard 조회 범위</div>
+        <div class="metric-card__hint">
+          최근 1년 활성 운송 (전체 법인)
+        </div>
       </article>
 
       <article class="metric-card">
@@ -359,7 +410,7 @@ function saveAisMappings() {
           v-model="searchText"
           class="vessel-search"
           type="search"
-          placeholder="선박명·법인·Lane·운송번호 검색"
+          placeholder="선박명·Lane·운송번호 검색"
         >
       </div>
 
@@ -376,96 +427,108 @@ function saveAisMappings() {
         {{ errorMessage || storageError }}
       </div>
 
-      <div class="vessel-table-wrap">
-        <table class="vessel-table">
-          <thead>
-            <tr>
-              <th>상태</th>
-              <th>선박명</th>
-              <th>MMSI No.</th>
-              <th>운송건</th>
-              <th>법인</th>
-              <th>POL–POD</th>
-              <th>최종 ETA</th>
-              <th>처리</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr
-              v-for="row in filteredRows"
-              :key="row.vessel_name"
-            >
-              <td>
-                <span
-                  class="vessel-status"
-                  :class="`vessel-status--${row.status.toLowerCase()}`"
-                >
-                  {{ statusLabel(row.status) }}
-                </span>
-              </td>
-
-              <td>
-                <strong>{{ row.vessel_name }}</strong>
-                <small>IF 원문 Key 그대로 사용</small>
-              </td>
-
-              <td>
-                <input
-                  v-model="draftMmsi[row.vessel_name]"
-                  class="mmsi-input"
-                  inputmode="numeric"
-                  maxlength="9"
-                  placeholder="9자리"
-                >
-              </td>
-
-              <td>
-                <strong>{{ row.shipment_count }}</strong>
-                <small>
-                  {{ row.trpr_nos.slice(0, 2).join(', ') }}
-                </small>
-              </td>
-
-              <td>{{ row.companies.join(', ') || '-' }}</td>
-
-              <td :title="row.lanes.join(', ')">
-                {{ row.lanes.slice(0, 2).join(', ') || '-' }}
-              </td>
-
-              <td>{{ formatDate(row.latest_eta) }}</td>
-
-              <td>
-                <div class="row-actions">
-                  <button
-                    type="button"
-                    class="save"
-                    @click="saveRow(row)"
-                  >
-                    저장
-                  </button>
-                  <button
-                    v-if="row.status === 'MAPPED'"
-                    type="button"
-                    class="delete"
-                    @click="deleteRow(row)"
-                  >
-                    삭제
-                  </button>
-                </div>
-              </td>
-            </tr>
-
-            <tr v-if="filteredRows.length === 0">
-              <td colspan="8" class="empty-cell">
-                {{ props.transports.length === 0
-                  ? '운송 데이터가 없습니다. 대시보드에서 먼저 데이터를 조회하세요.'
-                  : '조건에 맞는 선박이 없습니다.' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div
+        v-if="!inventoryData"
+        class="vessel-guide"
+      >
+        '선박 목록 조회' 버튼을 누르면 법인 구분 없이
+        최근 1년 활성 운송의 선박 목록을 가져옵니다.
       </div>
+
+      <template v-else>
+        <p class="vessel-meta">
+          조회 기준: {{ formatDateTime(inventoryData.generated_at) }}
+          <template v-if="inventoryData.cache_hit">
+            (캐시)
+          </template>
+        </p>
+
+        <div class="vessel-table-wrap">
+          <table class="vessel-table">
+            <thead>
+              <tr>
+                <th>상태</th>
+                <th>선박명</th>
+                <th>MMSI No.</th>
+                <th>운송건</th>
+                <th>POL–POD</th>
+                <th>최종 ETA</th>
+                <th>처리</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr
+                v-for="row in filteredRows"
+                :key="row.vessel_name"
+              >
+                <td>
+                  <span
+                    class="vessel-status"
+                    :class="`vessel-status--${row.status.toLowerCase()}`"
+                  >
+                    {{ statusLabel(row.status) }}
+                  </span>
+                </td>
+
+                <td>
+                  <strong>{{ row.vessel_name }}</strong>
+                  <small>IF 원문 Key 그대로 사용</small>
+                </td>
+
+                <td>
+                  <input
+                    v-model="draftMmsi[row.vessel_name]"
+                    class="mmsi-input"
+                    inputmode="numeric"
+                    maxlength="9"
+                    placeholder="9자리"
+                  >
+                </td>
+
+                <td>
+                  <strong>{{ row.shipment_count }}</strong>
+                  <small>
+                    {{ row.trpr_nos.slice(0, 2).join(', ') }}
+                  </small>
+                </td>
+
+                <td :title="row.lanes.join(', ')">
+                  {{ row.lanes.slice(0, 2).join(', ') || '-' }}
+                </td>
+
+                <td>{{ formatDate(row.latest_eta) }}</td>
+
+                <td>
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="save"
+                      @click="saveRow(row)"
+                    >
+                      저장
+                    </button>
+                    <button
+                      v-if="row.status === 'MAPPED'"
+                      type="button"
+                      class="delete"
+                      @click="deleteRow(row)"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr v-if="filteredRows.length === 0">
+                <td colspan="7" class="empty-cell">
+                  조건에 맞는 선박이 없습니다.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </section>
   </main>
 </template>
@@ -563,6 +626,23 @@ function saveAisMappings() {
 .vessel-message--error {
   color: #b91c1c;
   background: rgba(239, 68, 68, 0.1);
+}
+
+.vessel-guide {
+  padding: 28px 16px;
+  color: var(--li-text-muted, #607086);
+  font-size: 12px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.73);
+  border: 1px solid var(--li-border, rgba(16, 42, 67, 0.11));
+  border-radius: 11px;
+}
+
+.vessel-meta {
+  margin: 0 0 8px;
+  color: var(--li-text-faint, #8a98aa);
+  font-size: 11px;
+  text-align: right;
 }
 
 .vessel-table-wrap {
@@ -676,9 +756,9 @@ function saveAisMappings() {
   background: rgba(239, 68, 68, 0.07);
 }
 
-.empty-cell {
-  padding: 24px !important;
-  color: var(--li-text-muted, #607086) !important;
+.vessel-table td.empty-cell {
+  padding: 24px;
+  color: var(--li-text-muted, #607086);
   text-align: center;
 }
 

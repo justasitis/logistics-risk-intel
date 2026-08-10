@@ -3051,8 +3051,6 @@ onBeforeUnmount(() => {
 
       <VesselMmsiManager
 
-        :transports="transports"
-
         :ais-items="matchedAisItems"
 
       />

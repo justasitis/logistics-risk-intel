@@ -1,8 +1,8 @@
 import type {
   AisMapItem,
-  TransportRecord,
 } from '@/types/dashboard'
 import type {
+  VesselInventoryApiResponse,
   VesselInventoryInput,
   VesselInventoryResult,
   VesselMappingImportResult,
@@ -11,6 +11,7 @@ import type {
   VesselUsageRow,
 } from '@/types/vesselMmsi'
 
+// 백엔드 api_server.py의 VESSEL_NAME_PLACEHOLDERS와 동일 기준.
 const INVALID_VESSEL_NAMES = new Set([
   '',
   '-',
@@ -21,6 +22,7 @@ const INVALID_VESSEL_NAMES = new Set([
   'UNKNOWN',
   'UNKNOWN VESSEL',
   'TBA',
+  'TBD',
   'TBN',
   'TO BE ANNOUNCED',
   'TO BE NAMED',
@@ -29,66 +31,9 @@ const INVALID_VESSEL_NAMES = new Set([
   '선명미정',
 ])
 
-interface VesselAccumulator {
-  transportKeys: Set<string>
-  trprNos: Set<string>
-  companies: Set<string>
-  lanes: Set<string>
-  etds: string[]
-  etas: string[]
-}
-
 function text(value: unknown): string {
   if (value === null || value === undefined) return ''
   return String(value).trim()
-}
-
-function uniqueSorted(values: Iterable<string>): string[] {
-  return [...new Set(
-    [...values].map((value) => value.trim()).filter(Boolean),
-  )].sort((left, right) => left.localeCompare(right))
-}
-
-function isoTime(value: string | null | undefined): number | null {
-  if (!value) return null
-  const parsed = new Date(value).getTime()
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function earliestDate(values: string[]): string | null {
-  let selected: string | null = null
-  let selectedTime = Number.POSITIVE_INFINITY
-
-  for (const value of values) {
-    const time = isoTime(value)
-    if (time === null || time >= selectedTime) continue
-    selected = value
-    selectedTime = time
-  }
-
-  return selected
-}
-
-function latestDate(values: string[]): string | null {
-  let selected: string | null = null
-  let selectedTime = Number.NEGATIVE_INFINITY
-
-  for (const value of values) {
-    const time = isoTime(value)
-    if (time === null || time <= selectedTime) continue
-    selected = value
-    selectedTime = time
-  }
-
-  return selected
-}
-
-function laneLabel(transport: TransportRecord): string {
-  const pol = text(transport.pol) || text(transport.pol_name)
-  const pod = text(transport.pod) || text(transport.pod_name)
-
-  if (!pol && !pod) return ''
-  return `${pol || '?'}-${pod || '?'}`
 }
 
 /**
@@ -114,6 +59,46 @@ export function normalizeMmsi(value: unknown): string {
 
 export function isValidMmsi(value: unknown): boolean {
   return /^\d{9}$/.test(normalizeMmsi(value))
+}
+
+/**
+ * 선박 인벤토리 조회 — GET /api/vessels/inventory.
+ * 법인 구분 없이 최근 1년 활성 운송을 선박명 기준으로 집계한 결과.
+ */
+export async function fetchVesselInventory(
+  refresh = false,
+  signal?: AbortSignal,
+): Promise<VesselInventoryApiResponse> {
+  const params = new URLSearchParams()
+  if (refresh) {
+    params.append('refresh', 'true')
+  }
+
+  const response = await fetch(
+    `/api/vessels/inventory?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      signal,
+    },
+  )
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`
+
+    try {
+      const body = await response.json()
+      detail = body.detail ?? detail
+    } catch {
+      // JSON 응답이 아니면 HTTP 상태를 사용한다.
+    }
+
+    throw new Error(detail)
+  }
+
+  return (await response.json()) as VesselInventoryApiResponse
 }
 
 export function createVesselMapping(
@@ -182,54 +167,21 @@ function aisMmsiIndex(
   return result
 }
 
+/**
+ * API 인벤토리 행 + 로컬 MMSI 매핑 + AIS 감지 목록을 합쳐
+ * 상태(MISSING/MAPPED/AIS_DETECTED)가 붙은 화면용 행을 만든다.
+ */
 export function buildVesselInventory(
   input: VesselInventoryInput,
 ): VesselInventoryResult {
-  const accumulators = new Map<string, VesselAccumulator>()
-  let validVesselTransportCount = 0
-
-  for (const transport of input.transports) {
-    const vesselName = text(transport.vessel_name)
-    if (!isUsableVesselName(vesselName)) continue
-
-    validVesselTransportCount += 1
-
-    const accumulator = accumulators.get(vesselName) ?? {
-      transportKeys: new Set<string>(),
-      trprNos: new Set<string>(),
-      companies: new Set<string>(),
-      lanes: new Set<string>(),
-      etds: [],
-      etas: [],
-    }
-
-    accumulator.transportKeys.add(transport.transport_key)
-
-    if (transport.trpr_no) {
-      accumulator.trprNos.add(transport.trpr_no)
-    }
-    if (transport.cmpy_cd) {
-      accumulator.companies.add(transport.cmpy_cd)
-    }
-
-    const lane = laneLabel(transport)
-    if (lane) accumulator.lanes.add(lane)
-
-    if (transport.current_etd) {
-      accumulator.etds.push(transport.current_etd)
-    }
-    if (transport.current_eta) {
-      accumulator.etas.push(transport.current_eta)
-    }
-
-    accumulators.set(vesselName, accumulator)
-  }
-
   const mappings = mappingIndex(input.mappings)
   const aisMmsi = aisMmsiIndex(input.aisItems ?? [])
   const rows: VesselUsageRow[] = []
 
-  for (const [vesselName, accumulator] of accumulators.entries()) {
+  for (const apiRow of input.vessels) {
+    const vesselName = text(apiRow.vessel_name)
+    if (!isUsableVesselName(vesselName)) continue
+
     const mapping = mappings.get(vesselName)
     const detectedMmsi = aisMmsi.get(vesselName)
     const mmsi = mapping?.mmsi_no ?? detectedMmsi ?? null
@@ -237,13 +189,10 @@ export function buildVesselInventory(
     rows.push({
       vessel_name: vesselName,
       normalized_vessel_name: vesselName,
-      shipment_count: accumulator.transportKeys.size,
-      transport_keys: uniqueSorted(accumulator.transportKeys),
-      trpr_nos: uniqueSorted(accumulator.trprNos),
-      companies: uniqueSorted(accumulator.companies),
-      lanes: uniqueSorted(accumulator.lanes),
-      earliest_etd: earliestDate(accumulator.etds),
-      latest_eta: latestDate(accumulator.etas),
+      shipment_count: apiRow.shipment_count,
+      trpr_nos: [...apiRow.trpr_nos],
+      lanes: [...apiRow.lanes],
+      latest_eta: apiRow.latest_eta,
       mapped_mmsi_no: mmsi,
       mapping_source: mapping?.source ?? (
         detectedMmsi ? 'AIS_UPLOAD' : null
@@ -282,8 +231,7 @@ export function buildVesselInventory(
   return {
     rows,
     summary: {
-      transport_count: input.transports.length,
-      valid_vessel_transport_count: validVesselTransportCount,
+      transport_count: input.transportCount,
       unique_vessel_count: rows.length,
       mapped_vessel_count: rows.filter(
         (row) => row.status === 'MAPPED',
@@ -325,9 +273,7 @@ export function vesselRowsToCsv(
     'vessel_name_key',
     'mmsi_no',
     'shipment_count',
-    'companies',
     'lanes',
-    'earliest_etd',
     'latest_eta',
     'notes',
   ]
@@ -337,9 +283,7 @@ export function vesselRowsToCsv(
     row.vessel_name,
     row.mapped_mmsi_no ?? '',
     row.shipment_count,
-    row.companies.join('|'),
     row.lanes.join('|'),
-    dateOnly(row.earliest_etd),
     dateOnly(row.latest_eta),
     '',
   ].map(csvCell).join(','))
