@@ -762,8 +762,40 @@ watch(
 
 watch(
   () => props.selectedAisId,
-  () => {
+  (aisId) => {
     updateSelectedAisFilter()
+
+    // HBL/운송 선택 시 연결된 선박이 지도에 있으면 중앙으로 이동
+    if (!map || !aisId) return
+
+    let target: [number, number] | null = null
+    for (const item of props.aisVessels.features) {
+      const itemProps = item.properties as
+        | { ais_id?: string }
+        | undefined
+      if (itemProps?.ais_id !== aisId) continue
+
+      const geometry = item.geometry as
+        | { type?: string; coordinates?: unknown }
+        | undefined
+      const coords = geometry?.coordinates
+      if (
+        geometry?.type === 'Point'
+        && Array.isArray(coords)
+        && typeof coords[0] === 'number'
+        && typeof coords[1] === 'number'
+      ) {
+        target = [coords[0], coords[1]]
+      }
+      break
+    }
+    if (!target) return
+
+    map.easeTo({
+      center: target,
+      zoom: Math.max(map.getZoom(), 4),
+      duration: 600,
+    })
   },
 )
 
