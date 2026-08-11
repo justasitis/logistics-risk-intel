@@ -34,15 +34,14 @@ const mapContainer = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
 let hasFittedInitialRoutes = false
 
-/** MI 아이콘 펄스 — prefers-reduced-motion 환경에서는 기본 OFF */
+/** MI 아이콘 애니메이션 — prefers-reduced-motion 환경에서는 기본 OFF */
 const storedMiIconPulse = localStorage.getItem('lri-mi-icon-pulse')
 const miIconPulse = ref(
   storedMiIconPulse !== null
     ? storedMiIconPulse === 'on'
     : !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
 )
-let miIconPulseTimer: ReturnType<typeof setInterval> | null = null
-let miIconPulseBright = true
+const miMarkers: maplibregl.Marker[] = []
 
 const emptyFeatureCollection: GeoJsonFeatureCollection = {
   type: 'FeatureCollection',
@@ -190,10 +189,10 @@ const MI_ICON_SEVERITY_COLORS: Record<string, string> = {
 }
 
 const MI_ICON_GLYPHS: Record<string, string> = {
-  // 태풍/폭풍 — 파란 구름 + 노란 번개
+  // 태풍/폭풍 — 회전하는 소용돌이
   WEATHER:
-    '<path d="M7.8 14.8a3.1 3.1 0 0 1-.5-6.16A4.1 4.1 0 0 1 15.2 7.4a2.9 2.9 0 0 1 1 5.6" stroke="#5fb2f2"/>'
-    + '<path d="M12.2 12.4 10 15.6h1.9l-.9 3 3.2-4.1h-1.9l1.4-2.1z" fill="#ffd24a" stroke="#d9a412"/>',
+    '<path d="M12 12c0-1.6 1.3-2.8 2.9-2.7 2.1.1 3.4 2 3.2 4.2-.3 2.7-2.7 4.7-5.6 4.5-3.5-.3-5.9-3.5-5.5-7.1.5-4.2 4.2-7.2 8.6-6.7" stroke="#5fb2f2"/>'
+    + '<circle cx="12" cy="12" r="1.5" fill="#bfe3ff" stroke="none"/>',
   // 파업 — 빨간 정지 표지(팔각형 + 흰 바)
   LABOR_STRIKE:
     '<path d="M9 5.6h6l3.4 3.4v6L15 18.4H9l-3.4-3.4V9z" fill="#e0323f" stroke="#ff7b86"/>'
@@ -216,8 +215,8 @@ const MI_ICON_GLYPHS: Record<string, string> = {
     + '<path d="M8.2 8.6v7.6M12 8.6v7.6M15.8 8.6v7.6" stroke="#ff9a3d"/>',
 }
 
-function miIconSvg(glyph: string, ringColor: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`
+function miIconSvg(glyph: string, ringColor: string, size = 24): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">`
     + `<circle cx="12" cy="12" r="10.6" fill="rgba(4, 17, 32, 0.88)" stroke="${ringColor}" stroke-width="1.4"/>`
     + `<g fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`
     + `</svg>`
@@ -230,128 +229,117 @@ function miIconDataUrl(type: string, severity: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
-function miIconImageName(type: string, severity: string): string {
-  return `mi-icon-${type.toLowerCase()}-${severity.toLowerCase()}`
+/** MI 영향권(원 폴리곤) feature의 중심 좌표 */
+function miZoneFeatureCenter(
+  feature: GeoJsonFeatureCollection['features'][number],
+): [number, number] | null {
+  const geometry = feature.geometry as
+    | { type?: string; coordinates?: unknown }
+    | undefined
+  if (!geometry) return null
+
+  if (geometry.type === 'Point' && Array.isArray(geometry.coordinates)) {
+    const [lon, lat] = geometry.coordinates as unknown[]
+    if (typeof lon === 'number' && typeof lat === 'number') return [lon, lat]
+    return null
+  }
+
+  if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
+    const ring = (geometry.coordinates as unknown[])[0]
+    if (!Array.isArray(ring)) return null
+
+    let sumLon = 0
+    let sumLat = 0
+    let count = 0
+    for (const point of ring) {
+      if (!Array.isArray(point)) continue
+      const [lon, lat] = point as unknown[]
+      if (typeof lon !== 'number' || typeof lat !== 'number') continue
+      sumLon += lon
+      sumLat += lat
+      count += 1
+    }
+    if (count === 0) return null
+    return [sumLon / count, sumLat / count]
+  }
+
+  return null
 }
 
-function miIconImageExpression(type: string): maplibregl.ExpressionSpecification {
-  return [
-    'match',
-    ['get', 'severity'],
-    'CRITICAL',
-    miIconImageName(type, 'CRITICAL'),
-    'HIGH',
-    miIconImageName(type, 'HIGH'),
-    'MEDIUM',
-    miIconImageName(type, 'MEDIUM'),
-    miIconImageName(type, 'LOW'),
-  ]
-}
+/** MI 이벤트 DOM 마커 — 유형별 CSS keyframes 애니메이션, --mi-sev=심각도 색 */
+function buildMiMarkerElement(type: string, severity: string): HTMLElement {
+  const element = document.createElement('div')
+  element.className = `mi-marker mi-marker--${type.toLowerCase()}`
+  const ringColor = MI_ICON_SEVERITY_COLORS[severity]
+    ?? MI_ICON_SEVERITY_COLORS.LOW!
+  element.style.setProperty('--mi-sev', ringColor)
 
-async function registerMiTypeIcons(target: maplibregl.Map): Promise<void> {
-  const tasks: Promise<void>[] = []
+  if (type === 'GEOPOLITICAL') {
+    const halo = document.createElement('span')
+    halo.className = 'mi-marker__halo'
+    element.appendChild(halo)
+  }
 
-  for (const type of Object.keys(MI_ICON_GLYPHS)) {
-    for (const severity of Object.keys(MI_ICON_SEVERITY_COLORS)) {
-      const name = miIconImageName(type, severity)
-      tasks.push(new Promise((resolve) => {
-        const image = new Image()
-        image.onload = () => {
-          if (!target.hasImage(name)) {
-            target.addImage(name, image, { pixelRatio: 2 })
-          }
-          resolve()
-        }
-        image.onerror = () => resolve()
-        image.src = miIconDataUrl(type, severity)
-      }))
+  const icon = document.createElement('span')
+  icon.className = 'mi-marker__icon'
+  icon.innerHTML = miIconSvg(MI_ICON_GLYPHS[type] ?? '', ringColor, 30)
+  element.appendChild(icon)
+
+  if (type === 'PORT_CONGESTION') {
+    for (let index = 0; index < 2; index += 1) {
+      const ripple = document.createElement('span')
+      ripple.className = 'mi-marker__ripple'
+      ripple.style.animationDelay = `${index * 1.1}s`
+      element.appendChild(ripple)
     }
   }
 
-  await Promise.all(tasks)
+  return element
 }
 
-function addMiZoneIconLayer(target: maplibregl.Map) {
-  if (!target.getSource('mi-zones') || target.getLayer('mi-zone-icons')) return
-
-  target.addLayer({
-    id: 'mi-zone-icons',
-    type: 'symbol',
-    source: 'mi-zones',
-    filter: [
-      'in',
-      ['get', 'event_type'],
-      ['literal', Object.keys(MI_ICON_GLYPHS)],
-    ],
-    layout: {
-      'icon-image': [
-        'match',
-        ['get', 'event_type'],
-        'WEATHER',
-        miIconImageExpression('WEATHER'),
-        'LABOR_STRIKE',
-        miIconImageExpression('LABOR_STRIKE'),
-        'GEOPOLITICAL',
-        miIconImageExpression('GEOPOLITICAL'),
-        'PORT_CONGESTION',
-        miIconImageExpression('PORT_CONGESTION'),
-        'CAPACITY_SHORTAGE',
-        miIconImageExpression('CAPACITY_SHORTAGE'),
-        miIconImageName('WEATHER', 'LOW'),
-      ],
-      'icon-size': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        1,
-        0.8,
-        5,
-        1.3,
-        9,
-        1.7,
-      ],
-      'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
-    },
-  })
+function clearMiMarkers() {
+  for (const marker of miMarkers) marker.remove()
+  miMarkers.length = 0
 }
 
-/** MI 아이콘 펄스 — icon-opacity를 700ms 주기로 교대 */
-function applyMiIconPulse() {
-  if (!map?.getLayer('mi-zone-icons')) return
-  map.setPaintProperty(
-    'mi-zone-icons',
-    'icon-opacity',
-    miIconPulseBright ? 1 : 0.45,
-  )
-}
+function syncMiZoneMarkers() {
+  clearMiMarkers()
+  const target = map
+  if (!target) return
 
-function stopMiIconPulse() {
-  if (miIconPulseTimer !== null) {
-    clearInterval(miIconPulseTimer)
-    miIconPulseTimer = null
+  for (const feature of props.miZones.features) {
+    const properties = feature.properties as
+      | { event_type?: string; severity?: string; event_id?: string }
+      | undefined
+    const type = String(properties?.event_type ?? '')
+    if (!MI_ICON_GLYPHS[type]) continue
+
+    const center = miZoneFeatureCenter(feature)
+    if (!center) continue
+
+    const element = buildMiMarkerElement(
+      type,
+      String(properties?.severity ?? 'LOW'),
+    )
+    const eventId = String(properties?.event_id ?? '')
+    if (eventId) {
+      element.addEventListener('click', (domEvent) => {
+        domEvent.stopPropagation()
+        emit('selectMi', eventId)
+      })
+    }
+
+    miMarkers.push(
+      new maplibregl.Marker({ element })
+        .setLngLat(center)
+        .addTo(target),
+    )
   }
-  miIconPulseBright = true
-  applyMiIconPulse()
-}
-
-function startMiIconPulse() {
-  stopMiIconPulse()
-  if (!miIconPulse.value || !map?.getLayer('mi-zone-icons')) return
-  miIconPulseTimer = setInterval(() => {
-    miIconPulseBright = !miIconPulseBright
-    applyMiIconPulse()
-  }, 700)
 }
 
 function toggleMiIconPulse() {
   miIconPulse.value = !miIconPulse.value
   localStorage.setItem('lri-mi-icon-pulse', miIconPulse.value ? 'on' : 'off')
-  if (miIconPulse.value) {
-    startMiIconPulse()
-  } else {
-    stopMiIconPulse()
-  }
 }
 
 function updateGeoJsonSource(
@@ -538,11 +526,7 @@ onMounted(() => {
       map.addImage('vessel-arrow', createVesselArrow(), { pixelRatio: 2 })
     }
 
-    const iconMap = map
-    void registerMiTypeIcons(iconMap).then(() => {
-      addMiZoneIconLayer(iconMap)
-      startMiIconPulse()
-    })
+    syncMiZoneMarkers()
 
     map.addLayer({
       id: 'schedule-route-glow',
@@ -993,6 +977,7 @@ watch(
   () => props.miZones,
   (zones) => {
     updateGeoJsonSource('mi-zones', zones)
+    syncMiZoneMarkers()
   },
   { deep: true },
 )
@@ -1037,14 +1022,14 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  stopMiIconPulse()
+  clearMiMarkers()
   map?.remove()
   map = null
 })
 </script>
 
 <template>
-  <div class="map-wrapper">
+  <div class="map-wrapper" :class="{ 'mi-anim-off': !miIconPulse }">
     <div ref="mapContainer" class="map-container"></div>
 
     <div class="map-title">
@@ -1062,7 +1047,7 @@ onBeforeUnmount(() => {
       :class="{ off: !miIconPulse }"
       @click="toggleMiIconPulse"
     >
-      MI 아이콘 펄스 {{ miIconPulse ? 'ON' : 'OFF' }}
+      MI 아이콘 애니메이션 {{ miIconPulse ? 'ON' : 'OFF' }}
     </button>
 
     <div class="map-legend">
@@ -1166,6 +1151,113 @@ onBeforeUnmount(() => {
 
 .mi-pulse-toggle.off {
   color: #7f9cb2;
+}
+
+:global(.mi-marker) {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+
+:global(.mi-marker__icon) {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+:global(.mi-marker__icon svg) {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+:global(.mi-marker--weather .mi-marker__icon) {
+  animation: mi-spin 5s linear infinite;
+}
+
+:global(.mi-marker--labor_strike .mi-marker__icon) {
+  animation: mi-blink 1.4s ease-in-out infinite;
+}
+
+:global(.mi-marker--capacity_shortage .mi-marker__icon) {
+  animation: mi-bob 2.2s ease-in-out infinite;
+}
+
+:global(.mi-marker__halo) {
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  animation: mi-glow 1.6s ease-in-out infinite;
+}
+
+:global(.mi-marker__ripple) {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--mi-sev);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: mi-ripple 2.2s ease-out infinite;
+}
+
+@keyframes mi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mi-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes mi-bob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes mi-glow {
+  0%, 100% {
+    box-shadow: 0 0 3px 1px var(--mi-sev);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px var(--mi-sev);
+  }
+}
+
+@keyframes mi-ripple {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+.mi-anim-off :global(.mi-marker__icon),
+.mi-anim-off :global(.mi-marker__halo),
+.mi-anim-off :global(.mi-marker__ripple) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(.mi-marker__icon),
+  :global(.mi-marker__halo),
+  :global(.mi-marker__ripple) {
+    animation: none;
+  }
 }
 
 .map-legend {
