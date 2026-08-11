@@ -644,6 +644,10 @@ defineExpose({ getSvgHtml })
   text-decoration: underline;
   cursor: pointer;
 }
+/* 링크는 드래그보다 클릭이 우선 — 위의 .popup text 포인터 제외를 되돌림 */
+.popup a .popup-article {
+  pointer-events: auto;
+}
 .popup-link {
   stroke-width: 1;
   stroke-dasharray: 2 2;
