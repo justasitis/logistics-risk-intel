@@ -174,3 +174,29 @@ def test_api_approved_map_zones_empty_store(run_store):
     resp = client.get("/api/mi/approved/map-zones")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_article_url_from_evidence(run_store):
+    """evidence 중 URL이 있는 첫 항목이 article_url로 노출된다."""
+    with_url = _event(
+        "EV-LINK",
+        evidence=[
+            {"article_id": "A1", "title": "t", "url": "", "source": "s"},
+            {
+                "article_id": "A2",
+                "title": "t2",
+                "url": "https://example.com/news/1",
+                "source": "s",
+            },
+        ],
+    )
+    without_url = _event("EV-NOLINK", evidence=[])
+    _write_run(
+        run_store,
+        "run",
+        {"canonical_payload": _canonical([with_url, without_url])},
+        mtime=100,
+    )
+    zones = {z["event_id"]: z for z in svc.approved_map_zones()}
+    assert zones["EV-LINK"]["article_url"] == "https://example.com/news/1"
+    assert zones["EV-NOLINK"]["article_url"] == ""

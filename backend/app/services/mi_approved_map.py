@@ -34,6 +34,19 @@ def _is_expired(event: dict[str, Any], today: date) -> bool:
         return False
 
 
+def _article_url(event: dict[str, Any]) -> str:
+    """대표 기사 URL — evidence 중 URL이 있는 첫 항목."""
+    evidence = event.get("evidence") or []
+    if not isinstance(evidence, list):
+        return ""
+    for item in evidence:
+        if isinstance(item, dict):
+            url = str(item.get("url") or "").strip()
+            if url.startswith("http://") or url.startswith("https://"):
+                return url
+    return ""
+
+
 def approved_map_zones() -> list[dict[str, Any]]:
     """최신 승인본(canonical) 이벤트의 지도 영향권.
 
@@ -78,6 +91,8 @@ def approved_map_zones() -> list[dict[str, Any]]:
                 "valid_to": str(event.get("valid_to") or "")[:10] or None,
                 # 지도 라벨(Actify 생성 간결 문구) — 없으면 프런트가 headline 폭 사용
                 "short_label": labels.get(event_id, ""),
+                # 대표 기사 링크 (없으면 빈 문자열)
+                "article_url": _article_url(event),
                 "locations": [
                     {
                         "code": str(loc.get("code") or ""),

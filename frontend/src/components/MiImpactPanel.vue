@@ -24,6 +24,15 @@ function impactCount(eventId: string): number {
       .map((impact) => impact.transport_key),
   ).size
 }
+
+/** 대표 기사 URL — evidence 중 http(s) URL이 있는 첫 항목 */
+function articleUrl(event: RefinedMiEvent): string {
+  return (
+    event.evidence?.find(
+      (item) => typeof item.url === 'string' && item.url.startsWith('http'),
+    )?.url ?? ''
+  )
+}
 </script>
 
 <template>
@@ -56,28 +65,42 @@ function impactCount(eventId: string): number {
     </div>
 
     <div class="mi-impact-list">
-      <button
+      <div
         v-for="event in events"
         :key="event.event_id"
-        type="button"
-        class="mi-impact-card"
-        :class="{ selected: event.event_id === selectedEventId }"
-        @click="emit('selectEvent', event.event_id)"
+        class="mi-impact-item"
       >
-        <div class="mi-impact-card__head">
-          <RiskBadge :severity="event.severity" />
-          <span>{{ Math.round(event.confidence * 100) }}%</span>
-        </div>
+        <button
+          type="button"
+          class="mi-impact-card"
+          :class="{ selected: event.event_id === selectedEventId }"
+          @click="emit('selectEvent', event.event_id)"
+        >
+          <div class="mi-impact-card__head">
+            <RiskBadge :severity="event.severity" />
+            <span>{{ Math.round(event.confidence * 100) }}%</span>
+          </div>
 
-        <strong>{{ event.headline }}</strong>
-        <p>{{ event.summary }}</p>
+          <strong>{{ event.headline }}</strong>
+          <p>{{ event.summary }}</p>
 
-        <div class="mi-impact-card__meta">
-          <span>{{ event.status }}</span>
-          <span>위치 {{ event.affected_locations.length }}</span>
-          <span>영향 운송 {{ impactCount(event.event_id) }}</span>
-        </div>
-      </button>
+          <div class="mi-impact-card__meta">
+            <span>{{ event.status }}</span>
+            <span>위치 {{ event.affected_locations.length }}</span>
+            <span>영향 운송 {{ impactCount(event.event_id) }}</span>
+          </div>
+        </button>
+        <a
+          v-if="articleUrl(event)"
+          :href="articleUrl(event)"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mi-impact-card__article"
+          @click.stop
+        >
+          연관기사 클릭
+        </a>
+      </div>
     </div>
 
     <div v-if="events.length === 0" class="mi-impact-empty">
@@ -160,6 +183,19 @@ function impactCount(eventId: string): number {
   gap: 8px;
   max-height: 300px;
   overflow-y: auto;
+}
+
+.mi-impact-item {
+  display: grid;
+  gap: 3px;
+}
+
+.mi-impact-card__article {
+  justify-self: end;
+  padding: 0 4px;
+  color: var(--li-blue, #2563eb);
+  font-size: 11px;
+  text-decoration: underline;
 }
 
 .mi-impact-card {

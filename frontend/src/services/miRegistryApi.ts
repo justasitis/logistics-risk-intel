@@ -36,6 +36,8 @@ export async function rebuildMiRegistry(): Promise<RegistryRebuildResponse> {
 export type ApprovedMapZone = RegistryMapZone & {
   valid_from: string
   valid_to: string | null
+  /** 대표 기사 URL (없으면 빈 문자열) */
+  article_url?: string
 }
 
 export async function getApprovedMapZones(): Promise<ApprovedMapZone[]> {

@@ -8,7 +8,7 @@ import type { RegistryMapZone } from '../services/miUpload'
  * 배경은 번들된 세계 육지 폴리곤(Natural Earth 110m 계열, 오프라인)을
  * 등거리 도법으로 투영한 인라인 SVG. 타일 서버/외부 라이브러리 불필요.
  */
-const props = defineProps<{ zones: RegistryMapZone[] }>()
+const props = defineProps<{ zones: Array<RegistryMapZone & { article_url?: string }> }>()
 
 interface Region {
   key: string
@@ -182,7 +182,7 @@ function overlapArea(a: LabelRect, b: LabelRect): number {
  * 옆 배치(dx≠0)는 상하로 한 박스 높이만큼 밀어 보고, 위/아래 배치(dy≠0)는 좌우로 밀어
  * 같은 간격·방향에서 겹침 회피 기회를 늘린다.
  */
-function candidatesFor(circle: ZoneCircle, w: number): LabelRect[] {
+function candidatesFor(circle: ZoneCircle, w: number, h: number = POPUP_H): LabelRect[] {
   const out: LabelRect[] = []
   for (const gap of LABEL_GAPS) {
     for (const [dx, dy] of LABEL_DIRS) {
@@ -192,21 +192,21 @@ function candidatesFor(circle: ZoneCircle, w: number): LabelRect[] {
           ? circle.cx - circle.r - gap - w
           : circle.cx - w / 2
       const by = dy < 0
-        ? circle.cy - circle.r - gap - POPUP_H
+        ? circle.cy - circle.r - gap - h
         : dy > 0
           ? circle.cy + circle.r + gap
-          : circle.cy - POPUP_H / 2
+          : circle.cy - h / 2
       const shifts: Array<[number, number]> = dx !== 0
-        ? [[0, 0], [0, -(POPUP_H + 6)], [0, POPUP_H + 6]]
+        ? [[0, 0], [0, -(h + 6)], [0, h + 6]]
         : dy !== 0
           ? [[0, 0], [-24, 0], [24, 0]]
           : [[0, 0]]
       for (const [sx, sy] of shifts) {
         out.push({
           x: Math.max(4, Math.min(W - 4 - w, bx + sx)),
-          y: Math.max(4, Math.min(H - 4 - POPUP_H, by + sy)),
+          y: Math.max(4, Math.min(H - 4 - h, by + sy)),
           w,
-          h: POPUP_H,
+          h,
         })
       }
     }
@@ -309,6 +309,7 @@ interface PopupBox extends LabelRect {
   key: string
   title: string
   sub: string
+  url: string
   color: string
   anchorX: number
   anchorY: number
@@ -325,12 +326,19 @@ const popupBoxes = computed<PopupBox[]>(() => {
     const zone = zoneByEvent.get(circle.eventId)
     const title = labelText(zone)
     const sub = `${circle.name} · ${circle.severity} · ${circle.active ? '진행 중' : '완화'}`
-    const w = Math.max(estimateWidth(title), estimateWidth(sub))
+    const url = (zone?.article_url ?? '').trim()
+    const linkText = url ? '연관기사 클릭' : ''
+    const w = Math.max(
+      estimateWidth(title),
+      estimateWidth(sub),
+      linkText ? estimateWidth(linkText) : 0,
+    )
+    const h = url ? POPUP_H + 14 : POPUP_H
     // 이미 열린 팝업과 겹치지 않는 첫 자리 탐색, 모두 겹치면 겹침 면적이 가장 작은 자리에 배치
     let chosen: LabelRect | null = null
     let best: LabelRect | null = null
     let bestArea = Number.POSITIVE_INFINITY
-    for (const rect of candidatesFor(circle, w)) {
+    for (const rect of candidatesFor(circle, w, h)) {
       const area = placed.reduce((sum, p) => sum + overlapArea(p, rect), 0)
       if (area === 0 && !placed.some((p) => rectsOverlap(p, rect, 3))) {
         chosen = rect
@@ -351,6 +359,7 @@ const popupBoxes = computed<PopupBox[]>(() => {
       key,
       title,
       sub,
+      url,
       color: circle.color,
       anchorX: circle.cx,
       anchorY: circle.cy,
@@ -476,6 +485,16 @@ defineExpose({ getSvgHtml })
               {{ b.title }}
             </text>
             <text :x="b.x + 9" :y="b.y + 29" class="popup-sub">{{ b.sub }}</text>
+            <a
+              v-if="b.url"
+              :href="b.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              @pointerdown.stop
+              @click.stop
+            >
+              <text :x="b.x + 9" :y="b.y + 43" class="popup-article">연관기사 클릭</text>
+            </a>
             <g class="popup-close" @pointerdown.stop @click.stop="closePopup(b.key)">
               <rect :x="b.x + b.w - 19" :y="b.y + 5" width="14" height="14" rx="4" class="popup-close-bg" />
               <text :x="b.x + b.w - 12" :y="b.y + 15.5" class="popup-close-x">×</text>
@@ -618,6 +637,12 @@ defineExpose({ getSvgHtml })
 .popup-sub {
   font-size: 11px;
   fill: var(--li-text-muted);
+}
+.popup-article {
+  font-size: 11px;
+  fill: var(--li-blue, #2563eb);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .popup-link {
   stroke-width: 1;
