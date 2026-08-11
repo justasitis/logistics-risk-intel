@@ -283,7 +283,7 @@ const loading = ref(false)
 
 const errorMessage = ref('')
 
-const selectedCompany = ref('SKO')
+const selectedCompany = ref('')
 
 const selectedTransportKey = ref('')
 
