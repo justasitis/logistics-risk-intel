@@ -34,6 +34,16 @@ const mapContainer = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
 let hasFittedInitialRoutes = false
 
+/** MI 아이콘 펄스 — prefers-reduced-motion 환경에서는 기본 OFF */
+const storedMiIconPulse = localStorage.getItem('lri-mi-icon-pulse')
+const miIconPulse = ref(
+  storedMiIconPulse !== null
+    ? storedMiIconPulse === 'on'
+    : !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+)
+let miIconPulseTimer: ReturnType<typeof setInterval> | null = null
+let miIconPulseBright = true
+
 const emptyFeatureCollection: GeoJsonFeatureCollection = {
   type: 'FeatureCollection',
   features: [],
@@ -171,7 +181,7 @@ function createVesselArrow(): ImageData {
   return context.getImageData(0, 0, 32, 32)
 }
 
-/** MI 이벤트 유형별 지도 아이콘 — 아이콘=유형, 색=심각도 */
+/** MI 이벤트 유형별 지도 아이콘 — 아이콘=유형(고유 색상), 외곽 링 색=심각도 */
 const MI_ICON_SEVERITY_COLORS: Record<string, string> = {
   CRITICAL: '#ff3158',
   HIGH: '#ff8a28',
@@ -180,36 +190,36 @@ const MI_ICON_SEVERITY_COLORS: Record<string, string> = {
 }
 
 const MI_ICON_GLYPHS: Record<string, string> = {
-  // 태풍/폭풍 — 구름 + 번개
+  // 태풍/폭풍 — 파란 구름 + 노란 번개
   WEATHER:
-    '<path d="M7.8 14.8a3.1 3.1 0 0 1-.5-6.16A4.1 4.1 0 0 1 15.2 7.4a2.9 2.9 0 0 1 1 5.6"/>'
-    + '<path d="M12.2 12.4 10 15.6h1.9l-.9 3 3.2-4.1h-1.9l1.4-2.1z" fill="{c}" stroke="none"/>',
-  // 파업 — 정지 표지(팔각형 + 바)
+    '<path d="M7.8 14.8a3.1 3.1 0 0 1-.5-6.16A4.1 4.1 0 0 1 15.2 7.4a2.9 2.9 0 0 1 1 5.6" stroke="#5fb2f2"/>'
+    + '<path d="M12.2 12.4 10 15.6h1.9l-.9 3 3.2-4.1h-1.9l1.4-2.1z" fill="#ffd24a" stroke="#d9a412"/>',
+  // 파업 — 빨간 정지 표지(팔각형 + 흰 바)
   LABOR_STRIKE:
-    '<path d="M9 5.6h6l3.4 3.4v6L15 18.4H9l-3.4-3.4V9z"/>'
-    + '<path d="M8.6 12h6.8"/>',
-  // 지정학 — 경고 방패
+    '<path d="M9 5.6h6l3.4 3.4v6L15 18.4H9l-3.4-3.4V9z" fill="#e0323f" stroke="#ff7b86"/>'
+    + '<path d="M8.6 12h6.8" stroke="#ffffff"/>',
+  // 지정학 — 빨간 경고 방패 + 흰 느낌표
   GEOPOLITICAL:
-    '<path d="M12 4.8 17.6 7v4.2c0 3.6-2.3 6.1-5.6 7.4-3.3-1.3-5.6-3.8-5.6-7.4V7z"/>'
-    + '<path d="M12 8.6v4"/>'
-    + '<circle cx="12" cy="15" r="0.9" fill="{c}" stroke="none"/>',
-  // 항만 적체 — 앵커
+    '<path d="M12 4.8 17.6 7v4.2c0 3.6-2.3 6.1-5.6 7.4-3.3-1.3-5.6-3.8-5.6-7.4V7z" fill="rgba(224, 50, 63, 0.35)" stroke="#ff5b68"/>'
+    + '<path d="M12 8.6v4" stroke="#ffffff"/>'
+    + '<circle cx="12" cy="15" r="0.9" fill="#ffffff" stroke="none"/>',
+  // 항만 적체 — 청록 앵커
   PORT_CONGESTION:
-    '<circle cx="12" cy="6.4" r="1.7"/>'
-    + '<path d="M12 8.1v11"/>'
-    + '<path d="M8.8 10.6h6.4"/>'
-    + '<path d="M5.8 13.8c0 3.8 2.8 6.1 6.2 6.1s6.2-2.3 6.2-6.1"/>'
-    + '<path d="M5.8 13.8l-1 1.7M5.8 13.8l1.6 1.1M18.2 13.8l1 1.7M18.2 13.8l-1.6 1.1"/>',
-  // 선복 부족 — 컨테이너
+    '<circle cx="12" cy="6.4" r="1.7" stroke="#2fd4c4"/>'
+    + '<path d="M12 8.1v11" stroke="#2fd4c4"/>'
+    + '<path d="M8.8 10.6h6.4" stroke="#2fd4c4"/>'
+    + '<path d="M5.8 13.8c0 3.8 2.8 6.1 6.2 6.1s6.2-2.3 6.2-6.1" stroke="#2fd4c4"/>'
+    + '<path d="M5.8 13.8l-1 1.7M5.8 13.8l1.6 1.1M18.2 13.8l1 1.7M18.2 13.8l-1.6 1.1" stroke="#2fd4c4"/>',
+  // 선복 부족 — 주황 컨테이너
   CAPACITY_SHORTAGE:
-    '<rect x="4.8" y="8.6" width="14.4" height="7.6" rx="0.8"/>'
-    + '<path d="M8.2 8.6v7.6M12 8.6v7.6M15.8 8.6v7.6"/>',
+    '<rect x="4.8" y="8.6" width="14.4" height="7.6" rx="0.8" fill="rgba(255, 154, 61, 0.2)" stroke="#ff9a3d"/>'
+    + '<path d="M8.2 8.6v7.6M12 8.6v7.6M15.8 8.6v7.6" stroke="#ff9a3d"/>',
 }
 
-function miIconSvg(glyph: string, color: string): string {
+function miIconSvg(glyph: string, ringColor: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`
-    + `<circle cx="12" cy="12" r="10.6" fill="rgba(4, 17, 32, 0.88)" stroke="${color}" stroke-width="1.4"/>`
-    + `<g fill="none" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${glyph.replaceAll('{c}', color)}</g>`
+    + `<circle cx="12" cy="12" r="10.6" fill="rgba(4, 17, 32, 0.88)" stroke="${ringColor}" stroke-width="1.4"/>`
+    + `<g fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</g>`
     + `</svg>`
 }
 
@@ -294,16 +304,54 @@ function addMiZoneIconLayer(target: maplibregl.Map) {
         ['linear'],
         ['zoom'],
         1,
-        0.55,
+        0.8,
         5,
-        0.95,
+        1.3,
         9,
-        1.25,
+        1.7,
       ],
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
     },
   })
+}
+
+/** MI 아이콘 펄스 — icon-opacity를 700ms 주기로 교대 */
+function applyMiIconPulse() {
+  if (!map?.getLayer('mi-zone-icons')) return
+  map.setPaintProperty(
+    'mi-zone-icons',
+    'icon-opacity',
+    miIconPulseBright ? 1 : 0.45,
+  )
+}
+
+function stopMiIconPulse() {
+  if (miIconPulseTimer !== null) {
+    clearInterval(miIconPulseTimer)
+    miIconPulseTimer = null
+  }
+  miIconPulseBright = true
+  applyMiIconPulse()
+}
+
+function startMiIconPulse() {
+  stopMiIconPulse()
+  if (!miIconPulse.value || !map?.getLayer('mi-zone-icons')) return
+  miIconPulseTimer = setInterval(() => {
+    miIconPulseBright = !miIconPulseBright
+    applyMiIconPulse()
+  }, 700)
+}
+
+function toggleMiIconPulse() {
+  miIconPulse.value = !miIconPulse.value
+  localStorage.setItem('lri-mi-icon-pulse', miIconPulse.value ? 'on' : 'off')
+  if (miIconPulse.value) {
+    startMiIconPulse()
+  } else {
+    stopMiIconPulse()
+  }
 }
 
 function updateGeoJsonSource(
@@ -493,6 +541,7 @@ onMounted(() => {
     const iconMap = map
     void registerMiTypeIcons(iconMap).then(() => {
       addMiZoneIconLayer(iconMap)
+      startMiIconPulse()
     })
 
     map.addLayer({
@@ -933,7 +982,7 @@ watch(
 
     map.easeTo({
       center: target,
-      zoom: Math.max(map.getZoom(), 4),
+      zoom: Math.max(map.getZoom(), 3),
       duration: 600,
     })
   },
@@ -988,6 +1037,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  stopMiIconPulse()
   map?.remove()
   map = null
 })
@@ -1006,6 +1056,15 @@ onBeforeUnmount(() => {
       {{ routes.features.length.toLocaleString() }} routes · {{ aisVessels.features.length.toLocaleString() }} vessels · {{ miZones.features.length.toLocaleString() }} MI zones
     </div>
 
+    <button
+      type="button"
+      class="mi-pulse-toggle"
+      :class="{ off: !miIconPulse }"
+      @click="toggleMiIconPulse"
+    >
+      MI 아이콘 펄스 {{ miIconPulse ? 'ON' : 'OFF' }}
+    </button>
+
     <div class="map-legend">
       <div><span class="legend-line critical"></span>CRITICAL</div>
       <div><span class="legend-line high"></span>HIGH</div>
@@ -1020,7 +1079,7 @@ onBeforeUnmount(() => {
       <div><img class="legend-icon" :src="miIconDataUrl('GEOPOLITICAL', 'LOW')" alt="">지정학 리스크</div>
       <div><img class="legend-icon" :src="miIconDataUrl('PORT_CONGESTION', 'LOW')" alt="">항만 적체</div>
       <div><img class="legend-icon" :src="miIconDataUrl('CAPACITY_SHORTAGE', 'LOW')" alt="">선복 부족</div>
-      <div class="legend-note">아이콘 색상 = 심각도</div>
+      <div class="legend-note">아이콘 테두리 색상 = 심각도</div>
     </div>
 
     <div v-if="loading" class="map-loading">
@@ -1088,6 +1147,25 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #29f0a8;
   box-shadow: 0 0 10px #29f0a8;
+}
+
+.mi-pulse-toggle {
+  position: absolute;
+  top: 98px;
+  right: 18px;
+  z-index: 10;
+  padding: 5px 12px;
+  border: 1px solid rgba(93, 201, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(4, 17, 32, 0.88);
+  color: #dff6ff;
+  font-size: 11px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.mi-pulse-toggle.off {
+  color: #7f9cb2;
 }
 
 .map-legend {
@@ -1163,8 +1241,8 @@ onBeforeUnmount(() => {
 }
 
 .legend-icon {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
 }
 
 .legend-note {
