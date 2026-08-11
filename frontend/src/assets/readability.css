@@ -101,7 +101,7 @@ body {
 
 .source-summary span {
   padding: 6px 8px !important;
-  font-size: 10px !important;
+  font-size: 12px !important;
 }
 
 .event-count {
@@ -117,7 +117,7 @@ body {
 }
 
 .alert-level {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 .alert-body strong {
@@ -164,7 +164,7 @@ body {
 
 .signal-list span {
   padding: 7px 9px !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 .empty-list,
@@ -203,7 +203,7 @@ body {
 .ais-summary-grid span,
 .ais-detail-grid dt,
 .ais-warning {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 .ais-summary-grid strong {

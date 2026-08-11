@@ -180,7 +180,7 @@ async function restoreInput() {
 .mi-recovery__status {
   padding: 4px 8px;
   color: var(--li-blue, #2563eb);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.09);
@@ -214,7 +214,7 @@ async function restoreInput() {
   min-height: 35px;
   padding: 0 11px;
   color: var(--li-blue, #2563eb);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
   border: 1px solid rgba(37, 99, 235, 0.2);
   border-radius: 10px;
@@ -236,7 +236,7 @@ async function restoreInput() {
 .mi-recovery__message {
   margin-top: 10px;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .mi-recovery__summary {
@@ -251,12 +251,12 @@ async function restoreInput() {
 
 .mi-recovery__summary span {
   color: var(--li-text-faint, #8a98aa);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .mi-recovery__summary strong {
   color: var(--li-text, #122033);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 @media (max-width: 760px) {

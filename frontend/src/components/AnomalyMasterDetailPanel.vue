@@ -649,7 +649,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .anomaly-master-detail__count {
   padding: 6px 9px;
   color: var(--li-blue, #2563eb);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.1);
@@ -753,7 +753,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
   margin-top: 6px;
   overflow: hidden;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -776,9 +776,9 @@ function miValidPeriod(impact: MiTransportImpact): string {
 }
 
 .anomaly-event-card__meta span {
-  padding: 3px 6px;
+  padding: 4px 8px;
   color: var(--li-text-muted, #607086);
-  font-size: 8px;
+  font-size: 11px;
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.08);
 }
@@ -792,7 +792,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .anomaly-event-card__system-id {
   margin-top: 7px;
   color: var(--li-text-faint, #8a98aa);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .anomaly-master-detail__detail {
@@ -828,7 +828,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
   gap: 6px;
   margin: 6px 0 0;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .anomaly-master-detail__navigation {
@@ -840,7 +840,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
   min-height: 32px;
   padding: 0 9px;
   color: var(--li-text, #122033);
-  font-size: 10px;
+  font-size: 11px;
   border: 1px solid var(--li-border, rgba(16, 42, 67, 0.12));
   border-radius: 8px;
   background: rgba(248, 250, 252, 0.92);
@@ -855,7 +855,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .anomaly-master-detail__navigation span {
   min-width: 42px;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -875,7 +875,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
   min-height: 34px;
   padding: 0 11px;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
   border: 0;
@@ -891,11 +891,11 @@ function miValidPeriod(impact: MiTransportImpact): string {
 
 .anomaly-master-detail__tabs span {
   display: grid;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 4px;
   place-items: center;
-  font-size: 8px;
+  font-size: 12px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.1);
 }
@@ -926,7 +926,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 
 .shipment-summary-tab__severity {
   padding: 5px 9px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
   border-radius: 999px;
 }
@@ -967,7 +967,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .shipment-summary-tab__grid dt {
   margin-bottom: 5px;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .shipment-summary-tab__grid dd {
@@ -997,7 +997,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .shipment-summary-tab__signals span {
   padding: 6px 8px;
   color: #0369a1;
-  font-size: 9px;
+  font-size: 11px;
   border-radius: 8px;
   background: rgba(14, 165, 233, 0.09);
 }
@@ -1026,7 +1026,7 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .shipment-mi-card__head span {
   padding: 4px 7px;
   color: #b45309;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   border-radius: 999px;
   background: rgba(245, 158, 11, 0.12);
@@ -1067,12 +1067,12 @@ function miValidPeriod(impact: MiTransportImpact): string {
 .shipment-mi-card dt {
   margin-bottom: 3px;
   color: var(--li-text-muted, #607086);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .shipment-mi-card dd {
   margin: 0;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }

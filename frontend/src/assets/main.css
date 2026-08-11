@@ -166,7 +166,7 @@ button {
   display: block;
   margin-bottom: 4px;
   color: #3abfe6;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.16em;
 }
@@ -183,7 +183,7 @@ button {
   border-radius: 6px;
   background: rgba(15, 58, 89, 0.35);
   color: #9edcf7;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .metrics-grid {
@@ -222,7 +222,7 @@ button {
 .metric-card span {
   display: block;
   color: #88a9bd;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .metric-card strong {
@@ -296,7 +296,7 @@ button {
 }
 
 .alert-level {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
 }
@@ -323,13 +323,13 @@ button {
 .alert-body p {
   margin: 0;
   color: #7899ae;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
 .alert-card time {
   color: #64859a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .shipment-section h2 {
@@ -350,14 +350,14 @@ button {
 .detail-grid dt {
   margin-bottom: 3px;
   color: #64859a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .detail-grid dd {
   margin: 0;
   overflow: hidden;
   color: #d9effc;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -386,7 +386,7 @@ button {
   border-top: 1px solid rgba(74, 170, 224, 0.15);
   background: #030c16;
   color: #6f91a7;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .statusbar > div {

@@ -109,7 +109,7 @@ function impactsForEvent(eventId: string) {
   display: block;
   margin-bottom: 4px;
   color: #9a6c7a;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .mi-summary-grid strong {
@@ -150,7 +150,7 @@ function impactsForEvent(eventId: string) {
 .mi-event-title span {
   flex: 0 0 auto;
   color: #ff8da6;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -165,7 +165,7 @@ function impactsForEvent(eventId: string) {
   margin: 6px 0;
   overflow: hidden;
   color: #a5828e;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -176,7 +176,7 @@ function impactsForEvent(eventId: string) {
   flex-wrap: wrap;
   gap: 5px 9px;
   color: #815d69;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .severity-critical { border-left-color: #ff3158; }

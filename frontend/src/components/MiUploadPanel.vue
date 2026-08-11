@@ -130,7 +130,7 @@ async function handleFile(event: Event) {
   max-width: 95px;
   overflow: hidden;
   color: #a87b8a;
-  font-size: 8px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -161,7 +161,7 @@ async function handleFile(event: Event) {
   border-radius: 7px;
   background: rgba(40, 8, 19, 0.97);
   color: #ff9eb2;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.45;
 }
 </style>

@@ -132,7 +132,7 @@ const emit = defineEmits<{
   min-height: 32px;
   padding: 0 10px;
   color: var(--li-blue, #2563eb);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 780;
   border: 1px solid rgba(37, 99, 235, 0.22);
   border-radius: 9px;
@@ -161,7 +161,7 @@ const emit = defineEmits<{
 
 .marinesia-status__grid span {
   color: var(--li-text-muted, #607086);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .marinesia-status__grid strong {
@@ -173,7 +173,7 @@ const emit = defineEmits<{
 .marinesia-status__message,
 .marinesia-status__error {
   margin: 0;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }

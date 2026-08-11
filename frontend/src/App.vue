@@ -3310,7 +3310,7 @@ onBeforeUnmount(() => {
 
   color: #789aae;
 
-  font-size: 10px;
+  font-size: 11px;
 
 }
 
@@ -3358,7 +3358,7 @@ onBeforeUnmount(() => {
 
   color: #ff9bad;
 
-  font-size: 10px;
+  font-size: 11px;
 
 }
 
@@ -3382,7 +3382,7 @@ onBeforeUnmount(() => {
 
 .source-summary span {
 
-  padding: 4px 6px;
+  padding: 5px 8px;
 
   border-radius: 4px;
 
@@ -3390,7 +3390,7 @@ onBeforeUnmount(() => {
 
   color: #6f9ab4;
 
-  font-size: 8px;
+  font-size: 12px;
 
 }
 
@@ -3439,7 +3439,7 @@ onBeforeUnmount(() => {
 
   color: #a9c8db;
 
-  font-size: 9px;
+  font-size: 12px;
 
   font-weight: 800;
 
@@ -3454,7 +3454,7 @@ onBeforeUnmount(() => {
 
   color: #66899f;
 
-  font-size: 10px;
+  font-size: 11px;
 
   line-height: 1.55;
 
@@ -3477,7 +3477,7 @@ onBeforeUnmount(() => {
 
   color: #7399b0;
 
-  font-size: 9px;
+  font-size: 11px;
 
 }
 
@@ -3568,7 +3568,7 @@ onBeforeUnmount(() => {
 
   color: #75bcd9;
 
-  font-size: 8px;
+  font-size: 11px;
 
 }
 
@@ -3682,7 +3682,7 @@ onBeforeUnmount(() => {
 
   color: #6b8ea2;
 
-  font-size: 9px;
+  font-size: 11px;
 
 }
 
@@ -3738,7 +3738,7 @@ onBeforeUnmount(() => {
 
   color: #80a1b3;
 
-  font-size: 10px;
+  font-size: 11px;
 
 }
 
@@ -3775,11 +3775,11 @@ onBeforeUnmount(() => {
 
 .ais-status {
 
-  padding: 3px 6px;
+  padding: 4px 8px;
 
   border-radius: 9px;
 
-  font-size: 8px;
+  font-size: 11px;
 
   font-weight: 800;
 
@@ -3822,7 +3822,7 @@ onBeforeUnmount(() => {
 
   color: #5f8296;
 
-  font-size: 9px;
+  font-size: 11px;
 
 }
 
@@ -3837,7 +3837,7 @@ onBeforeUnmount(() => {
 
   color: #cbe7f4;
 
-  font-size: 10px;
+  font-size: 12px;
 
   text-overflow: ellipsis;
 
@@ -3854,7 +3854,7 @@ onBeforeUnmount(() => {
 
   color: #ffbd68;
 
-  font-size: 9px;
+  font-size: 11px;
 
 }
 

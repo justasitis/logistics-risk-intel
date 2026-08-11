@@ -1234,7 +1234,7 @@ onBeforeUnmount(() => {
 :global(.route-popup__severity) {
   margin-bottom: 3px;
   color: #ff9170;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
 }
 
