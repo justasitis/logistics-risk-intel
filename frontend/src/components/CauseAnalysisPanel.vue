@@ -263,7 +263,7 @@ function setCandidateDecision(
 .cause-panel__counts span {
   padding: 4px 7px;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.07);
 }
@@ -272,7 +272,7 @@ function setCandidateDecision(
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  font-size: 10px;
+  font-size: 12px;
   border-radius: 10px;
   background: rgba(232, 244, 255, 0.58);
 }
@@ -296,7 +296,7 @@ function setCandidateDecision(
 }
 
 .cause-panel__transport-id span {
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .cause-empty {
@@ -313,7 +313,7 @@ function setCandidateDecision(
 .cause-empty p {
   margin: 5px 0 0;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -355,7 +355,7 @@ function setCandidateDecision(
 .cause-confidence,
 .cause-decision {
   padding: 3px 6px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 850;
   border-radius: 999px;
 }
@@ -412,7 +412,7 @@ function setCandidateDecision(
 .cause-card__schedule {
   margin: 5px 0 0;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -440,7 +440,7 @@ function setCandidateDecision(
 .cause-breakdown span {
   padding: 3px 5px;
   color: var(--li-text-muted, #607086);
-  font-size: 8px;
+  font-size: 12px;
   border-radius: 6px;
   background: rgba(241, 245, 249, 0.82);
 }
@@ -455,14 +455,14 @@ function setCandidateDecision(
 .cause-actions li {
   margin: 3px 0;
   color: var(--li-text-soft, #344861);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
 .cause-actions {
   margin-top: 7px;
   color: var(--li-blue, #2563eb);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .cause-actions summary {
@@ -478,7 +478,7 @@ function setCandidateDecision(
   min-height: 28px;
   padding: 0 8px;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 760;
   border: 1px solid rgba(96, 112, 134, 0.18);
   border-radius: 8px;

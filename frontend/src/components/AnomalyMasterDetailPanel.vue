@@ -417,6 +417,42 @@ function miValidPeriod(impact: MiTransportImpact): string {
                 <dd>{{ selectedTransport.voyage_no || '-' }}</dd>
               </div>
               <div>
+                <dt>PO</dt>
+                <dd>
+                  <details v-if="selectedTransport.po_nos" class="inline-list">
+                    <summary>{{ selectedTransport.po_count ?? 0 }}건</summary>
+                    <div class="inline-list__body">
+                      <span
+                        v-for="po in selectedTransport.po_nos.split(',')"
+                        :key="po"
+                        class="inline-list__item"
+                      >{{ po.trim() }}</span>
+                    </div>
+                  </details>
+                  <template v-else>{{ selectedTransport.po_count ?? 0 }}건</template>
+                </dd>
+              </div>
+              <div>
+                <dt>Item</dt>
+                <dd>
+                  <details v-if="(selectedTransport.item_cds?.length ?? 0) > 0" class="inline-list">
+                    <summary>{{ selectedTransport.item_count ?? 0 }}개</summary>
+                    <div class="inline-list__body">
+                      <span
+                        v-for="cd in selectedTransport.item_cds ?? []"
+                        :key="cd"
+                        class="inline-list__item"
+                      >{{ cd }}</span>
+                      <span
+                        v-if="selectedTransport.item_names"
+                        class="inline-list__names"
+                      >{{ selectedTransport.item_names }}</span>
+                    </div>
+                  </details>
+                  <template v-else>{{ selectedTransport.item_count ?? 0 }}개</template>
+                </dd>
+              </div>
+              <div>
                 <dt>ETD</dt>
                 <dd>
                   {{ formatDate(selectedTransport.etd_initial) }}
@@ -468,42 +504,6 @@ function miValidPeriod(impact: MiTransportImpact): string {
                     : ''"
                 >
                   {{ deliveryBreachLabel(selectedTransport.delivery_req_breach_days) }}
-                </dd>
-              </div>
-              <div>
-                <dt>PO</dt>
-                <dd>
-                  <details v-if="selectedTransport.po_nos" class="inline-list">
-                    <summary>{{ selectedTransport.po_count ?? 0 }}건</summary>
-                    <div class="inline-list__body">
-                      <span
-                        v-for="po in selectedTransport.po_nos.split(',')"
-                        :key="po"
-                        class="inline-list__item"
-                      >{{ po.trim() }}</span>
-                    </div>
-                  </details>
-                  <template v-else>{{ selectedTransport.po_count ?? 0 }}건</template>
-                </dd>
-              </div>
-              <div>
-                <dt>Item</dt>
-                <dd>
-                  <details v-if="(selectedTransport.item_cds?.length ?? 0) > 0" class="inline-list">
-                    <summary>{{ selectedTransport.item_count ?? 0 }}개</summary>
-                    <div class="inline-list__body">
-                      <span
-                        v-for="cd in selectedTransport.item_cds ?? []"
-                        :key="cd"
-                        class="inline-list__item"
-                      >{{ cd }}</span>
-                      <span
-                        v-if="selectedTransport.item_names"
-                        class="inline-list__names"
-                      >{{ selectedTransport.item_names }}</span>
-                    </div>
-                  </details>
-                  <template v-else>{{ selectedTransport.item_count ?? 0 }}개</template>
                 </dd>
               </div>
             </dl>

@@ -147,7 +147,7 @@ function impactCount(eventId: string): number {
   display: block;
   margin-bottom: 4px;
   color: var(--li-text-muted, #607086);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .mi-impact-summary strong {
@@ -182,7 +182,7 @@ function impactCount(eventId: string): number {
 
 .mi-impact-card__head > span:last-child {
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -198,7 +198,7 @@ function impactCount(eventId: string): number {
   margin: 6px 0;
   overflow: hidden;
   color: var(--li-text-muted, #607086);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -207,14 +207,14 @@ function impactCount(eventId: string): number {
 .mi-impact-card__meta {
   justify-content: flex-start;
   flex-wrap: wrap;
-  color: var(--li-text-faint, #8a98aa);
-  font-size: 8px;
+  color: var(--li-text-muted, #607086);
+  font-size: 12px;
 }
 
 .mi-impact-empty {
   padding: 18px 8px;
   color: var(--li-text-muted, #607086);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   text-align: center;
 }

@@ -567,6 +567,34 @@ function saveAisMappings() {
   gap: 7px;
 }
 
+/* 공용 main.css의 다크 .metric-card 정의를 이 화면에서만 라이트 테마로 되돌린다. */
+.metric-card {
+  border: 1px solid var(--li-border, rgba(16, 42, 67, 0.11));
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: var(--li-shadow-card, 0 12px 28px rgba(15, 32, 54, 0.08));
+}
+
+.metric-card--blue {
+  background:
+    var(
+      --li-accent-gradient-soft,
+      linear-gradient(135deg, rgba(37, 99, 235, 0.14), rgba(6, 182, 212, 0.16))
+    ),
+    rgba(255, 255, 255, 0.74);
+}
+
+.metric-card__label {
+  color: var(--li-text-muted, #607086);
+}
+
+.metric-card__value {
+  color: var(--li-text, #122033);
+}
+
+.metric-card__hint {
+  color: var(--li-text-muted, #607086);
+}
+
 .vessel-table-panel {
   min-width: 0;
 }

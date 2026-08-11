@@ -237,21 +237,21 @@ function eventClass(event: TimelineEvent) {
 
 .timeline-heading strong {
   display: block;
-  color: #e6f5ff;
+  color: var(--li-text, #122033);
   font-size: 11px;
 }
 
 .timeline-heading small {
   display: block;
   margin-top: 3px;
-  color: #5f879e;
-  font-size: 7px;
+  color: var(--li-text-muted, #607086);
+  font-size: 12px;
 }
 
 .timeline-eyebrow {
   display: block;
   margin-bottom: 3px;
-  color: #3abfe6;
+  color: var(--li-blue, #2563eb);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -267,27 +267,27 @@ function eventClass(event: TimelineEvent) {
   align-items: center;
   gap: 5px;
   padding: 5px 7px;
-  border: 1px solid rgba(89, 180, 228, 0.16);
+  border: 1px solid var(--li-border, rgba(16, 42, 67, 0.13));
   border-radius: 5px;
-  background: rgba(7, 28, 47, 0.75);
-  color: #6f93a9;
+  background: rgba(248, 250, 252, 0.92);
+  color: var(--li-text-muted, #607086);
   font-size: 11px;
 }
 
 .timeline-tabs button.active {
-  border-color: rgba(71, 204, 255, 0.46);
-  background: rgba(15, 79, 112, 0.62);
-  color: #bfeeff;
+  border-color: rgba(37, 99, 235, 0.42);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--li-blue, #2563eb);
 }
 
 .timeline-tabs button span {
   display: grid;
   place-items: center;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 7px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(37, 99, 235, 0.1);
+  font-size: 12px;
 }
 
 .timeline-route {
@@ -313,8 +313,8 @@ function eventClass(event: TimelineEvent) {
 }
 
 .timeline-route span {
-  color: #65899f;
-  font-size: 7px;
+  color: #9fb6c6;
+  font-size: 12px;
 }
 
 .timeline-route strong {
@@ -371,8 +371,8 @@ function eventClass(event: TimelineEvent) {
 .timeline-summary span {
   display: block;
   margin-bottom: 3px;
-  color: #64869c;
-  font-size: 7px;
+  color: #9fb6c6;
+  font-size: 12px;
 }
 
 .timeline-summary strong {
@@ -452,8 +452,8 @@ function eventClass(event: TimelineEvent) {
 }
 
 .timeline-event-meta time {
-  color: #63879d;
-  font-size: 7px;
+  color: var(--li-text-muted, #607086);
+  font-size: 12px;
 }
 
 .change-badge {
@@ -480,7 +480,7 @@ function eventClass(event: TimelineEvent) {
   align-items: center;
   gap: 6px;
   margin-top: 5px;
-  color: #789db2;
+  color: var(--li-text-muted, #607086);
   font-size: 11px;
 }
 
@@ -496,8 +496,8 @@ function eventClass(event: TimelineEvent) {
 .timeline-actor {
   margin-top: 4px;
   overflow: hidden;
-  color: #4f7186;
-  font-size: 7px;
+  color: var(--li-text-muted, #607086);
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -511,14 +511,14 @@ function eventClass(event: TimelineEvent) {
   margin-top: 10px;
   padding: 10px;
   border-radius: 7px;
-  background: rgba(5, 24, 40, 0.52);
-  color: var(--li-text-faint, #8a98aa);
+  background: rgba(241, 245, 249, 0.85);
+  color: var(--li-text-muted, #607086);
   font-size: 11px;
   text-align: center;
 }
 
 .timeline-state.error {
-  color: #ff8699;
+  color: #dc2626;
 }
 
 .timeline-spinner {
