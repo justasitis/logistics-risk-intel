@@ -171,6 +171,141 @@ function createVesselArrow(): ImageData {
   return context.getImageData(0, 0, 32, 32)
 }
 
+/** MI 이벤트 유형별 지도 아이콘 — 아이콘=유형, 색=심각도 */
+const MI_ICON_SEVERITY_COLORS: Record<string, string> = {
+  CRITICAL: '#ff3158',
+  HIGH: '#ff8a28',
+  MEDIUM: '#ffd24a',
+  LOW: '#47d7ff',
+}
+
+const MI_ICON_GLYPHS: Record<string, string> = {
+  // 태풍/폭풍 — 구름 + 번개
+  WEATHER:
+    '<path d="M7.8 14.8a3.1 3.1 0 0 1-.5-6.16A4.1 4.1 0 0 1 15.2 7.4a2.9 2.9 0 0 1 1 5.6"/>'
+    + '<path d="M12.2 12.4 10 15.6h1.9l-.9 3 3.2-4.1h-1.9l1.4-2.1z" fill="{c}" stroke="none"/>',
+  // 파업 — 정지 표지(팔각형 + 바)
+  LABOR_STRIKE:
+    '<path d="M9 5.6h6l3.4 3.4v6L15 18.4H9l-3.4-3.4V9z"/>'
+    + '<path d="M8.6 12h6.8"/>',
+  // 지정학 — 경고 방패
+  GEOPOLITICAL:
+    '<path d="M12 4.8 17.6 7v4.2c0 3.6-2.3 6.1-5.6 7.4-3.3-1.3-5.6-3.8-5.6-7.4V7z"/>'
+    + '<path d="M12 8.6v4"/>'
+    + '<circle cx="12" cy="15" r="0.9" fill="{c}" stroke="none"/>',
+  // 항만 적체 — 앵커
+  PORT_CONGESTION:
+    '<circle cx="12" cy="6.4" r="1.7"/>'
+    + '<path d="M12 8.1v11"/>'
+    + '<path d="M8.8 10.6h6.4"/>'
+    + '<path d="M5.8 13.8c0 3.8 2.8 6.1 6.2 6.1s6.2-2.3 6.2-6.1"/>'
+    + '<path d="M5.8 13.8l-1 1.7M5.8 13.8l1.6 1.1M18.2 13.8l1 1.7M18.2 13.8l-1.6 1.1"/>',
+  // 선복 부족 — 컨테이너
+  CAPACITY_SHORTAGE:
+    '<rect x="4.8" y="8.6" width="14.4" height="7.6" rx="0.8"/>'
+    + '<path d="M8.2 8.6v7.6M12 8.6v7.6M15.8 8.6v7.6"/>',
+}
+
+function miIconSvg(glyph: string, color: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`
+    + `<circle cx="12" cy="12" r="10.6" fill="rgba(4, 17, 32, 0.88)" stroke="${color}" stroke-width="1.4"/>`
+    + `<g fill="none" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${glyph.replaceAll('{c}', color)}</g>`
+    + `</svg>`
+}
+
+function miIconDataUrl(type: string, severity: string): string {
+  const glyph = MI_ICON_GLYPHS[type] ?? ''
+  const color = MI_ICON_SEVERITY_COLORS[severity] ?? MI_ICON_SEVERITY_COLORS.LOW!
+  const svg = miIconSvg(glyph, color)
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+function miIconImageName(type: string, severity: string): string {
+  return `mi-icon-${type.toLowerCase()}-${severity.toLowerCase()}`
+}
+
+function miIconImageExpression(type: string): maplibregl.ExpressionSpecification {
+  return [
+    'match',
+    ['get', 'severity'],
+    'CRITICAL',
+    miIconImageName(type, 'CRITICAL'),
+    'HIGH',
+    miIconImageName(type, 'HIGH'),
+    'MEDIUM',
+    miIconImageName(type, 'MEDIUM'),
+    miIconImageName(type, 'LOW'),
+  ]
+}
+
+async function registerMiTypeIcons(target: maplibregl.Map): Promise<void> {
+  const tasks: Promise<void>[] = []
+
+  for (const type of Object.keys(MI_ICON_GLYPHS)) {
+    for (const severity of Object.keys(MI_ICON_SEVERITY_COLORS)) {
+      const name = miIconImageName(type, severity)
+      tasks.push(new Promise((resolve) => {
+        const image = new Image()
+        image.onload = () => {
+          if (!target.hasImage(name)) {
+            target.addImage(name, image, { pixelRatio: 2 })
+          }
+          resolve()
+        }
+        image.onerror = () => resolve()
+        image.src = miIconDataUrl(type, severity)
+      }))
+    }
+  }
+
+  await Promise.all(tasks)
+}
+
+function addMiZoneIconLayer(target: maplibregl.Map) {
+  if (!target.getSource('mi-zones') || target.getLayer('mi-zone-icons')) return
+
+  target.addLayer({
+    id: 'mi-zone-icons',
+    type: 'symbol',
+    source: 'mi-zones',
+    filter: [
+      'in',
+      ['get', 'event_type'],
+      ['literal', Object.keys(MI_ICON_GLYPHS)],
+    ],
+    layout: {
+      'icon-image': [
+        'match',
+        ['get', 'event_type'],
+        'WEATHER',
+        miIconImageExpression('WEATHER'),
+        'LABOR_STRIKE',
+        miIconImageExpression('LABOR_STRIKE'),
+        'GEOPOLITICAL',
+        miIconImageExpression('GEOPOLITICAL'),
+        'PORT_CONGESTION',
+        miIconImageExpression('PORT_CONGESTION'),
+        'CAPACITY_SHORTAGE',
+        miIconImageExpression('CAPACITY_SHORTAGE'),
+        miIconImageName('WEATHER', 'LOW'),
+      ],
+      'icon-size': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        1,
+        0.55,
+        5,
+        0.95,
+        9,
+        1.25,
+      ],
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+    },
+  })
+}
+
 function updateGeoJsonSource(
   sourceId: string,
   data: GeoJsonFeatureCollection,
@@ -354,6 +489,11 @@ onMounted(() => {
     if (!map.hasImage('vessel-arrow')) {
       map.addImage('vessel-arrow', createVesselArrow(), { pixelRatio: 2 })
     }
+
+    const iconMap = map
+    void registerMiTypeIcons(iconMap).then(() => {
+      addMiZoneIconLayer(iconMap)
+    })
 
     map.addLayer({
       id: 'schedule-route-glow',
@@ -875,6 +1015,12 @@ onBeforeUnmount(() => {
       <div><span class="legend-circle ais-stale"></span>AIS STALE</div>
       <div><span class="legend-zone mi-zone"></span>MI ZONE</div>
       <div><span class="legend-line mi-impact"></span>MI IMPACT</div>
+      <div><img class="legend-icon" :src="miIconDataUrl('WEATHER', 'LOW')" alt="">기상 악화</div>
+      <div><img class="legend-icon" :src="miIconDataUrl('LABOR_STRIKE', 'LOW')" alt="">노동 파업</div>
+      <div><img class="legend-icon" :src="miIconDataUrl('GEOPOLITICAL', 'LOW')" alt="">지정학 리스크</div>
+      <div><img class="legend-icon" :src="miIconDataUrl('PORT_CONGESTION', 'LOW')" alt="">항만 적체</div>
+      <div><img class="legend-icon" :src="miIconDataUrl('CAPACITY_SHORTAGE', 'LOW')" alt="">선복 부족</div>
+      <div class="legend-note">아이콘 색상 = 심각도</div>
     </div>
 
     <div v-if="loading" class="map-loading">
@@ -952,7 +1098,7 @@ onBeforeUnmount(() => {
   gap: 9px 18px;
   padding: 11px 14px;
   color: #bcd2e4;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .map-legend > div {
@@ -1014,6 +1160,16 @@ onBeforeUnmount(() => {
 .legend-line.mi-impact {
   background: #ff5ca0;
   box-shadow: 0 0 7px rgba(255, 92, 160, 0.75);
+}
+
+.legend-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.legend-note {
+  grid-column: 1 / -1;
+  color: #7f9cb2;
 }
 
 .map-loading,
