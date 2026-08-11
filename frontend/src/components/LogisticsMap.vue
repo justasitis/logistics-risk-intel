@@ -34,13 +34,6 @@ const mapContainer = ref<HTMLDivElement | null>(null)
 let map: maplibregl.Map | null = null
 let hasFittedInitialRoutes = false
 
-/** MI 아이콘 애니메이션 — prefers-reduced-motion 환경에서는 기본 OFF */
-const storedMiIconPulse = localStorage.getItem('lri-mi-icon-pulse')
-const miIconPulse = ref(
-  storedMiIconPulse !== null
-    ? storedMiIconPulse === 'on'
-    : !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-)
 const miMarkers: maplibregl.Marker[] = []
 
 const emptyFeatureCollection: GeoJsonFeatureCollection = {
@@ -337,11 +330,6 @@ function syncMiZoneMarkers() {
   }
 }
 
-function toggleMiIconPulse() {
-  miIconPulse.value = !miIconPulse.value
-  localStorage.setItem('lri-mi-icon-pulse', miIconPulse.value ? 'on' : 'off')
-}
-
 function updateGeoJsonSource(
   sourceId: string,
   data: GeoJsonFeatureCollection,
@@ -625,7 +613,7 @@ onMounted(() => {
           'MEDIUM', '#ffd24a',
           '#47d7ff',
         ],
-        'fill-opacity': 0.13,
+        'fill-opacity': 0.22,
       },
     })
 
@@ -1029,7 +1017,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="map-wrapper" :class="{ 'mi-anim-off': !miIconPulse }">
+  <div class="map-wrapper">
     <div ref="mapContainer" class="map-container"></div>
 
     <div class="map-title">
@@ -1040,15 +1028,6 @@ onBeforeUnmount(() => {
     <div class="map-counter">
       {{ routes.features.length.toLocaleString() }} routes · {{ aisVessels.features.length.toLocaleString() }} vessels · {{ miZones.features.length.toLocaleString() }} MI zones
     </div>
-
-    <button
-      type="button"
-      class="mi-pulse-toggle"
-      :class="{ off: !miIconPulse }"
-      @click="toggleMiIconPulse"
-    >
-      MI 아이콘 애니메이션 {{ miIconPulse ? 'ON' : 'OFF' }}
-    </button>
 
     <div class="map-legend">
       <div><span class="legend-line critical"></span>CRITICAL</div>
@@ -1132,25 +1111,6 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: #29f0a8;
   box-shadow: 0 0 10px #29f0a8;
-}
-
-.mi-pulse-toggle {
-  position: absolute;
-  top: 98px;
-  right: 18px;
-  z-index: 10;
-  padding: 5px 12px;
-  border: 1px solid rgba(93, 201, 255, 0.28);
-  border-radius: 999px;
-  background: rgba(4, 17, 32, 0.88);
-  color: #dff6ff;
-  font-size: 11px;
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-}
-
-.mi-pulse-toggle.off {
-  color: #7f9cb2;
 }
 
 :global(.mi-marker) {
@@ -1244,12 +1204,6 @@ onBeforeUnmount(() => {
     opacity: 0;
     transform: scale(2.4);
   }
-}
-
-.mi-anim-off :global(.mi-marker__icon),
-.mi-anim-off :global(.mi-marker__halo),
-.mi-anim-off :global(.mi-marker__ripple) {
-  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
