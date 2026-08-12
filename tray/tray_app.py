@@ -25,7 +25,19 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 def _open_app() -> None:
-    webbrowser.open(notifier_core.server_url())
+    """'앱 열기' — Edge 앱 모드로 연다. 실패 시 기본 브라우저 폴."""
+    import shutil
+    import subprocess
+
+    url = notifier_core.server_url()
+    edge = shutil.which("msedge") or shutil.which("msedge.exe")
+    try:
+        if edge:
+            subprocess.Popen([edge, f"--app={url}"])
+            return
+        subprocess.Popen(["cmd", "/c", "start", "msedge", f"--app={url}"])
+    except OSError:
+        webbrowser.open(url)
 
 
 def _create_image(count: int, failed: bool):

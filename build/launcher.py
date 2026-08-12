@@ -8,6 +8,8 @@ Path(__file__) 기준이라 frozen에서는 _MEIPASS를 가리키므로, exe 옆
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -15,6 +17,19 @@ import webbrowser
 from pathlib import Path
 
 APP_URL = "http://127.0.0.1:8000"
+
+
+def _open_app_mode(url: str) -> None:
+    """Edge 앱 모드(--app=)로 연다. 실패 시 기본 브라우저 폴."""
+    edge = shutil.which("msedge") or shutil.which("msedge.exe")
+    try:
+        if edge:
+            subprocess.Popen([edge, f"--app={url}"])
+            return
+        # PATH에 없으면 Windows start 명령의 Edge 별칭으로 시도
+        subprocess.Popen(["cmd", "/c", "start", "msedge", f"--app={url}"])
+    except OSError:
+        webbrowser.open(url)
 
 
 def _base_dir() -> Path:
@@ -40,10 +55,7 @@ except ImportError:  # dotenv 미설치 환경에서는 OS 환경변수만 사�
 
 def _open_browser() -> None:
     time.sleep(3)
-    try:
-        webbrowser.open(APP_URL)
-    except Exception:
-        pass
+    _open_app_mode(APP_URL)
 
 
 def main() -> None:
