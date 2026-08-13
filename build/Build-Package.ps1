@@ -1,4 +1,4 @@
-﻿# Build-Package.ps1
+# Build-Package.ps1
 # VDI에서 LogisticsRisk 무설치 배포 패키지를 빌드한다.
 #
 # 사용 (VDI PowerShell 5.1):
@@ -179,8 +179,8 @@ Add-Content -Path $EnvExampleDst -Value $EnvNote -Encoding UTF8
 & robocopy (Join-Path $ProjectRoot "deploy\sharepoint-sync") (Join-Path $PackageRoot "sharepoint-sync") /E /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -gt 7) { throw "robocopy(sharepoint-sync) 실패 (exit $LASTEXITCODE)" }
 
-# 실행 래퍼 cmd
-$CmdContent = "@echo off`r`nchcp 65001 >nul`r`ncd /d %~dp0`r`nLogisticsRisk\LogisticsRisk.exe`r`npause`r`n"
+# 실행 래퍼 cmd (포트 8000 사용 중이면 기존 프로세스를 종료하고 시작)
+$CmdContent = "@echo off`r`nchcp 65001 >nul`r`ncd /d %~dp0`r`nfor /f `"tokens=5`" %%a in ('netstat -ano ^| findstr LISTENING ^| findstr `":8000 `"') do taskkill /F /PID %%a >nul 2>&1`r`nLogisticsRisk\LogisticsRisk.exe`r`npause`r`n"
 [System.IO.File]::WriteAllText((Join-Path $PackageRoot "LogisticsRisk-시작.cmd"), $CmdContent, [System.Text.Encoding]::Default)
 
 # 팀원용 README
@@ -201,7 +201,7 @@ $ReadmeLines = @(
     "",
     "[주의]",
     "  - 백신/스마트스크린이 exe를 경고할 수 있습니다 (낸부 서명 없는 PyInstaller 산출물).",
-    "  - 포트 8000이 이미 사용 중이면 기존 프로세스를 먼저 종료하세요."
+    "  - 포트 8000을 쓰는 기존 프로세스는 시작 시 자동으로 종료됩니다."
 )
 [System.IO.File]::WriteAllText((Join-Path $PackageRoot "README-팀원안내.txt"), ($ReadmeLines -join "`r`n"), [System.Text.UTF8Encoding]::new($true))
 

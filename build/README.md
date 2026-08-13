@@ -66,8 +66,8 @@ dist-package/
 - 백신/스마트스크린이 미서명 exe를 경고할 수 있습니다 — 사내 예외 등록이
   필요할 수 있습니다.
 - `.env`는 exe 폴터(`LogisticsRisk\`) 기준으로 로드됩니다(런처가 먼저 읽음).
-- 포트 8000 사용 중이면 기동에 실패합니다 — 기존 `LogisticsRisk.exe`나
-  백엔드(`deploy\Start-Backend.ps1`로 띄운 uvicorn)를 먼저 종료하세요.
+- 포트 8000을 쓰는 기존 프로세스는 `LogisticsRisk-시작.cmd`가 시작 시
+  자동으로 종료합니다 (이전 실행 잔여분 정리).
 - 쓰기 데이터(mi_runs 등)는 exe 폴터 아래 상대경로에 생성됩니다.
   zip을 읽기 전용 위치에 풀지 마세요.
 
