@@ -1,4 +1,4 @@
-# Deploy-From-Local.ps1
+﻿# Deploy-From-Local.ps1
 # 회사 로컬 PC(git clone)에서 VDI 프로젝트로 변경·신규 파일만 반영하는 증분 배포 스크립트.
 # robocopy /E 를 사용하며 /MIR, /PURGE 는 쓰지 않는다 (VDI 측 파일 삭제 없음).
 #

@@ -1,4 +1,4 @@
-# Build-Package.ps1
+﻿# Build-Package.ps1
 # VDI에서 LogisticsRisk 무설치 배포 패키지를 빌드한다.
 #
 # 사용 (VDI PowerShell 5.1):
@@ -71,7 +71,7 @@ if (-not $SkipFrontend) {
     if ($NodeZip) {
         $SumFile = Get-ChildItem -Path $NodeRoot -Filter "node-v*-win-x64.sha256sum" -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $SumFile) {
-            Write-Warning "sha256sum 파일이 없어 zip 해시 검증을 건듭니다: $($NodeZip.Name)"
+            Write-Warning "sha256sum 파일이 없어 zip 해시 검증을 건너뜩니다: $($NodeZip.Name)"
         } else {
             $Expected = (($SumFile | Get-Content -First 1) -split '\s+')[0].ToUpper()
             $Actual = (Get-FileHash -Path $NodeZip.FullName -Algorithm SHA256).Hash.ToUpper()
@@ -200,7 +200,7 @@ $ReadmeLines = @(
     "  검은 콘솔 창을 닫으면 서버가 종료됩니다.",
     "",
     "[주의]",
-    "  - 백신/스마트스크린이 exe를 경고할 수 있습니다 (낸부 서명 없는 PyInstaller 산출물).",
+    "  - 백신/스마트스크린이 exe를 경고할 수 있습니다 (내부 서명 없는 PyInstaller 산출물).",
     "  - 포트 8000을 쓰는 기존 프로세스는 시작 시 자동으로 종료됩니다."
 )
 [System.IO.File]::WriteAllText((Join-Path $PackageRoot "README-팀원안내.txt"), ($ReadmeLines -join "`r`n"), [System.Text.UTF8Encoding]::new($true))
