@@ -13,7 +13,7 @@ rem =====================================================
 set "WORK_DIR=C:\Work"
 set "PROJECT_NAME=logistics-risk-intel"
 set "PROJECT_DIR=%WORK_DIR%\%PROJECT_NAME%"
-set "REPO_URL=https://github.com/lws2013/logistics-risk-intel.git"
+set "REPO_URL=https://github.com/justasitis/logistics-risk-intel.git"
 set "BRANCH=main"
 
 echo.
