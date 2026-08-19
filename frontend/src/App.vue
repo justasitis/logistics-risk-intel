@@ -2414,7 +2414,7 @@ onBeforeUnmount(() => {
 
       <div class="brand">
 
-        <div class="brand-mark">LRI</div>
+        <div class="brand-mark">MI</div>
 
 
  
