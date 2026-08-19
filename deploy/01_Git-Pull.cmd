@@ -60,11 +60,14 @@ if not exist "%PROJECT_DIR%\.git" (
 )
 
 rem --- 기존 저장소면 pull ---
-echo [1/3] 현재 브랜치 확인
-git branch --show-current
+echo [1/4] 현재 브랜치 확인
+set "CURRENT_BRANCH="
+for /f "delims=" %%A in ('git branch --show-current') do set "CURRENT_BRANCH=%%A"
+echo 현재 브랜치: %CURRENT_BRANCH%
+echo 대상 브랜치: %BRANCH%
 echo.
 
-echo [2/3] 로컬 변경사항 확인
+echo [2/4] 로컬 변경사항 확인
 git status --short
 
 for /f "delims=" %%A in ('git status --porcelain') do (
@@ -77,11 +80,39 @@ for /f "delims=" %%A in ('git status --porcelain') do (
 )
 
 echo.
-echo [3/3] 최신 코드 가져오기
+echo [3/4] 대상 브랜치로 전환
+git fetch origin
+if errorlevel 1 (
+    echo.
+    echo [실패] fetch 실패. GitHub 로그인 또는 네트워크를 확인하세요.
+    goto :ERROR
+)
+
+if /i not "%CURRENT_BRANCH%"=="%BRANCH%" (
+    echo [알림] 현재 브랜치가 %BRANCH% 가 아니므로 전환합니다.
+    git checkout "%BRANCH%"
+    if errorlevel 1 (
+        echo [알림] 로컬 %BRANCH% 브랜치가 없어 원격에서 새로 만듭니다.
+        git checkout -t "origin/%BRANCH%"
+        if errorlevel 1 (
+            echo.
+            echo [실패] %BRANCH% 브랜치로 전환하지 못했습니다.
+            goto :ERROR
+        )
+    )
+) else (
+    echo 이미 %BRANCH% 브랜치입니다.
+)
+
+echo.
+echo [4/4] 최신 코드 가져오기
 git pull --ff-only origin "%BRANCH%"
 if errorlevel 1 (
     echo.
     echo [실패] Git pull에 실패했습니다.
+    echo 로컬 %BRANCH% 가 원격과 갈라졌을 수 있습니다.
+    echo 아래 명령으로 현재 상태를 확인하세요.
+    echo     git log --oneline --graph origin/%BRANCH% %BRANCH%
     goto :ERROR
 )
 
