@@ -1,7 +1,8 @@
 # Logistics Risk Intelligence — 세션 핸드오프
 
 > 새 세션에서 이 문서를 첨부하면 바로 이어서 작업할 수 있다.
-> 최종 갱신: 2026-08-13 작업분까지 반영 (VDI repo 최신 커밋: eb951cd, pytest 419개 통과, npm build 통과)
+> 최종 갱신: 2026-08-19 인계 반영 (직전 코드 커밋: 9470bc9, pytest 419개 중 416 통과·3 skip, npm build 통과)
+> 매 세션 자동 적용되는 규칙 요약은 레포 루트 `CLAUDE.md` 참조 (이 문서 4·5·8장의 압축본)
 
 ---
 
@@ -13,29 +14,43 @@
 
 ## 2. repo와 배포 흐름 (필수)
 
-- **repo**: `github.com/lws2013/logistics-risk-intel` (VDI판, 유일)
-- **로컬 폴더 (이 PC)**: `C:\Users\milkg\programming\deepseek_test\logistics-risk-intel\`
-  - `logistics-risk-intel-vdi/` ← 작업 대상 소스 (origin 연결됨)
-  - `최초자료/` ← VDI 원본 파일, B-LAP 테이블 샘플, datalake_table_구조(컬럼 딕셔너리)
-  - `mi_report_sample.html` ← MI 리포트 구성 검토용 샘플 (가상 데이터)
-  - `old_json.txt` / `new_json.txt` ← AIS Marinesia JSON 구/신 포맷 샘플
-  - `delay_report.html` ← 지연 추이 탭 디자인 명세 (참조용)
+- **repo (정본)**: `github.com/justasitis/logistics-risk-intel` (VDI판, 유일)
+  - **인계 이력**: 원래 팀원 `lws2013` 계정에서 진행하던 과제를 인계받음. 이전 주소
+    `github.com/lws2013/logistics-risk-intel`는 더 이상 정본이 아니다. 문서·스크립트에
+    옛 주소가 남아 있으면 위 주소로 교체할 것
+  - 커밋 author: 이 PC에서 직접 작업한 분은 `justasitis`. 단 클라우드 세션(Claude Code on the web)에서
+    만들어진 커밋은 서명 검증 때문에 author가 `Claude <noreply@anthropic.com>`으로 남는다 —
+    작성 주체 구분용이며 정상이다
+- **로컬 폴더 (이 PC = 회사 PC)**: `C:\dev\logistics-risk-intel\` (repo 루트가 곧 작업 대상 소스, origin 연결됨)
+  - 전임자 PC에 있던 참고자료 사이드 폴더(`최초자료/`, `mi_report_sample.html`,
+    `old_json.txt`/`new_json.txt`, `delay_report.html`)는 이관하지 않았고 현재 불필요 판단.
+    필요해지면 전임자에게 별도 요청
 
 **배포 흐름**:
 ```
-이 PC에서 수정 → commit/push (GitHub, 현재 자동 진행)
-→ 회사 노트북 C:\Work\logistics-risk-intel: deploy/01_Git-Pull.cmd
+이 PC(회사 PC) C:\dev\logistics-risk-intel 에서 수정 → commit/push (GitHub, 현재 자동 진행)
+→ 중계 PC C:\Work\logistics-risk-intel: deploy/01_Git-Pull.cmd
 → VDI C:\dev\logistics-risk-intel: deploy/02_VDI-Deploy.cmd
    (\\Client\C$\Work\logistics-risk-intel 에서 robocopy 증분 복사 → npm build → pip(조건부) → 재기동)
 ```
 - 삭제/리네임 커밋에는 메시지에 `VDI 수동 삭제: <경로>` 명기 규칙. (그래서 미사용 파일은 디스크에 보존 중: AisUploadPanel.vue, GapPanel.vue)
 - exe 패키징: `build/Build-Package.ps1` (PyInstaller, 팀원 무설치 배포용, 트레이 exe 포함). 시작 래퍼 `LogisticsRisk-시작.cmd`는 포트 8000 점유 프로세스 자동 종료 후 기동.
 
-## 3. 현재 상태 (커밋 eb951cd 기준)
+## 3. 현재 상태 (코드 커밋 9470bc9 기준)
 
-- **백엔드**: FastAPI (`api_server.py` + `services/` + `backend/app/`), pytest **419개 전부 통과**
-- **프런트엔드**: Vue3+Vite+TS, `npm run build` 통과. 타이틀 "Logistics Risk Intelligence", Edge `--app=` 앱 모드 실행
-- **워크스페이스 탭**: 운송 이상·AIS / 외부 MI 정제(권한자만) / MMSI 관리 / 재고 영향(비활성화됨) / MI 리포트 / 지연 추이 / 경로 조회 / 기준정보(권한자만)
+- **백엔드**: FastAPI (`api_server.py` + `services/` + `backend/app/`),
+  pytest **419개 수집 / 416 통과 / 3 skip / 0 실패** (2026-08-19 새 클론 재검증)
+  - skip 3개는 재고(L2 수급 영향) API 테스트: `test_inventory_sim.py::test_api_items`,
+    `::test_api_simulate_ok`, `test_inventory_arrivals.py::test_api_fallback_to_sample_on_blap_failure`
+  - **사유**: 샘플 품목 마스터 `backend/data/inventory_items.json`이 git 미추적
+    (`.gitignore`의 `backend/data/*.json`, `*.sample.json` 대응본 없음)이라 새 클론에서
+    라우터가 항상 404를 반환한다. 코드 회귀가 아니라 데이터 파일 부재 문제이며,
+    **재고 기능을 사용하지 않기로 해 skip 처리**했다. 기능 재개 시 샘플본을
+    `inventory_items.sample.json`으로 추가하고 skip 마커를 해제할 것
+  - 같은 파일의 `inventory_sim.simulate()` 순수 함수 테스트는 외부 파일 의존이 없어 그대로 통과
+- **프런트엔드**: Vue3+Vite+TS, `npm run build`(vue-tsc 타입체크 + vite build) 통과 —
+  149 모듈, 타입 오류 0. 타이틀 "Logistics Risk Intelligence", Edge `--app=` 앱 모드 실행
+- **워크스페이스 탭**: 운송 이상·AIS / 외부 MI 정제(권한자만) / MMSI 관리 / 재고 영향(비활성화, 사용하지 않음) / MI 리포트 / 지연 추이 / 경로 조회 / 기준정보(권한자만)
 - **권한**: `GET /api/me` → can_manage_mi (REPORT_PUBLISH_USERS env, 기본 so23132,so23364). 외부 MI 정제·기준정보 탭 비노출 + MI 리포트 게시 권한에 공통 사용
 - **대시보드 (운송 이상·AIS)**: 법인 기본값은 '전체 법인', 명시 조회만. 지도(항로+AIS+승인 MI 영향권+레지스트리 영향권 토글), HBL 마스터-디테일(PO 번호 검색 지원, 요약은 PO·Item이 ETD 앞), HBL 선택 시 연결 선박으로 지도 이동(zoom 3). Timeline/MI 영향/원인 후보 탭. MI 영향 카드에 '연관기사 클릭' 링크
 - **MI 리포트 탭**: 게시본(스냅샷) 중심 — 일반 사용자는 게시본 열. 관리자 흐름: 새로고침(라이브 재집계, 미게시 배너) → 셀 편집 → 인사이트 초안 생성·편집·저장 → 게시본 갱신(서버가 게시 시점 재집계해 저장). 금월 핵심 변동은 유럽/미주/아시아 권역별 카드. 이벤트 지도는 **승인 이벤트** 기반(`GET /api/mi/approved/map-zones`, valid_to 경과 제외), 팝업 기본 표시+드래그 이동+연관기사 링크. 시황 3그래프
@@ -56,7 +71,9 @@
 - **날짜변경선**: searoute는 180° 초과 연속 경도 반환 → `services/geo_antimeridian.py` 공용 정규화(±180 분할 MultiLineString)를 overview(dashboard_geo_service)와 stopby(stopby_route_builder) 양쪽에 적용
 - **프런트 규칙**: `as any` 금지, `--li-*` 테마 토큰만, `!important` 금지, 최소 폰트 11px(수치 12px — 전체 일괄 적용 완료), 신규 npm 의존성 금지, 시작 시 자동 조회 금지(명시 조회만; 설정·권한 조회는 허용)
 - **백엔드 규칙**: 외부 호출 실패 시 내부 예외 문자열 노출 금지, 파일 쓰기는 atomic(tmp→os.replace), 500은 로그만
-- **git**: 코드 수정·검증 완료 시 **커밋+push 자동 진행(사용자 승인 지침)**, author `-c user.name="milkg" -c user.email="milkg@users.noreply.github.com"`, 논리 단위 커밋
+- **git**: 코드 수정·검증 완료 시 **커밋+push 자동 진행(사용자 승인 지침)**, 논리 단위 커밋.
+  author는 로컬 git config에 설정되어 있으므로 `-c user.name=...` 오버라이드를 붙이지 말 것
+  (전임자 기준의 `milkg` 지정은 폐기)
 - 한국어 출력, 용어는 '통찰'. 문서/산출물에 이모지 금지
 
 ## 5. 핵심 데이터/매핑
@@ -85,14 +102,38 @@
 8. 외부 Gemini 프롬프트의 위치 표기를 위치 마스터 코드로 제한하는 안내 (자유 형식 지명 누수 방지)
 9. MI 이벤트 지도 아이콘: 도입했다가 위치 어긋남으로 원복(0c86b24) — 재도입 시 위치 정합성부터 검증할 것
 
-## 7. 이 PC 환경
+### 인계 관련 (2026-08-19 추가)
+
+10. **재고(L2 수급 영향) 기능 정리 범위 결정**: 기능을 쓰지 않기로 해 테스트 3개는 skip 처리했으나
+    라우터·프런트 패널은 되살릴 여지를 남겨 그대로 보존 중. 완전 제거를 택할 경우의 범위는
+    `backend/app/api/routes/inventory.py` + `backend/app/services/inventory_sim.py`·`inventory_arrivals.py`
+    + `api_server.py`의 라우터 등록 + 프런트 재고 패널/탭 + `tests/test_inventory_*.py`
+    + `backend/data/inventory_stock_params.sample.json` + `.gitignore`의 재고 항목.
+    삭제 시 `VDI 수동 삭제: <경로>` 명기 필요. **미결정 상태 — 사용자 판단 대기**
+11. **전임자 자산 인계 확인**: 옛 remote(`lws2013`)에 이 repo에 없는 브랜치·이슈·미푸시 작업분이
+    남아 있는지, 참고자료(최초자료/ 등)가 다시 필요해지는지 확인 필요
+12. **VDI·중계 PC의 origin 주소 갱신**: `deploy/01_Git-Pull.cmd`의 하드코딩된 `REPO_URL`은
+    새 주소로 수정 완료. 다만 **이미 clone된 작업 폴더는 스크립트가 기존 origin을 그대로 쓰므로**
+    중계 PC(`C:\Work\logistics-risk-intel`)와 VDI(`C:\dev\logistics-risk-intel`)에서 각각
+    `git remote set-url origin https://github.com/justasitis/logistics-risk-intel.git` 실행 필요.
+    (혹은 폴더를 지우고 스크립트가 새로 clone하게 둔다)
+13. **PAT 만료 관리**: 이 PC는 PAT로 push하므로 만료 시 push 실패. 만료일과 갱신 주체를 정해둘 것
+
+## 7. 이 PC 환경 (회사 PC)
 
 - Windows + Git Bash, Python 3.12, Node 22
-- venv: `logistics-risk-intel-vdi/.venv` (`.venv/Scripts/python`)
-- 테스트: `cd logistics-risk-intel-vdi && .venv/Scripts/python -m pytest tests -q`
-- 빌드: `cd logistics-risk-intel-vdi/frontend && npm run build`
+- repo 루트: `C:\dev\logistics-risk-intel` (전임자 PC의 `logistics-risk-intel-vdi/` 중첩 구조 없음)
+- venv: repo 루트의 `.venv` → `.venv\Scripts\python`
+  - 최초 구성: `set PYTHONUTF8=1` → `python -m venv .venv` →
+    `.venv\Scripts\python -m pip install -r backend/requirements.txt`
+    (한글 Windows이므로 `PYTHONUTF8=1` 선행 필수. numpy 2.5.1이 Python 3.12+ 요구)
+- 테스트: `.venv\Scripts\python -m pytest tests -q`
+- 빌드: `cd frontend && npm install && npm run build`
+  - `package-lock.json`의 `resolved` URL이 사내 Nexus(`10.242.199.4:8987`)를 가리키므로
+    **사내망에서만 설치된다**. 외부망에서는 Nexus 도달 불가로 실패
 - Denodo/Actify는 VDI에서만 접근 가능 — 이 PC에서는 mock 테스트로 검증하고 실호출 확인은 VDI에서
-- gh CLI 없음 — push는 https remote (credential manager 등록됨)
+- gh CLI 없음 — push는 https remote, **PAT(Personal Access Token)로 인증**
+  (전임자 PC의 credential manager 등록 방식과 다름)
 
 ## 8. 협업 스타일
 
